@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/cli", "crates/wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Mathias Vanden Auweele <mathias@matdata.eu>"]
+license = "Apache-2.0"
+homepage = "https://github.com/Matdata-eu/schema-explorer"
+repository = "https://github.com/Matdata-eu/schema-explorer"
+
+[workspace.dependencies]
+schema-explorer-core = { path = "crates/core", version = "0.1.0" }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+opt-level = 3

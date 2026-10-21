@@ -1,0 +1,38 @@
+name: Build the web viewer
+description: Installs Rust (with the wasm target), wasm-bindgen-cli and Node, then builds web/dist (and optionally the npm package).
+inputs:
+  lib:
+    description: Also build the npm package into web/dist-lib
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: web
+    - name: Install wasm-bindgen-cli (the version in Cargo.lock)
+      shell: bash
+      run: |
+        V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')
+        if [ "$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')" != "$V" ]; then
+          cargo install wasm-bindgen-cli --version "$V" --locked --force
+        fi
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+    - name: Build web/dist
+      shell: bash
+      working-directory: web
+      run: |
+        npm ci
+        npm run build
+    - name: Build web/dist-lib
+      if: inputs.lib == 'true'
+      shell: bash
+      working-directory: web
+      run: SKIP_WASM=1 npm run build:lib

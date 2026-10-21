@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Real-world schemas for the tests; see scripts/fetch-fixtures.sh.
+  SCHEMA_FIXTURES: ${{ github.workspace }}/tests/fixtures
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Fetch the schema fixtures (NeTEx)
+        shell: bash
+        run: scripts/fetch-fixtures.sh
+      - name: Build
+        run: cargo build --all-targets --locked
+      - name: Test
+        run: cargo test --all-targets --locked
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  web:
+    name: Web viewer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-web
+        with:
+          lib: "true"
+      - name: Smoke test the CLI with the embedded viewer
+        run: |
+          cargo build --release --locked -p schema-explorer
+          ./target/release/schema-explorer --version
+          ./target/release/schema-explorer --notices | head -3

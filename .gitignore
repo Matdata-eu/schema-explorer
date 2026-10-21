@@ -1,0 +1,14 @@
+/target
+/web/node_modules
+/web/dist
+/web/dist-lib
+/web/src/wasm/
+/dist
+*.log
+/crates/cli/web-dist/
+/crates/cli/THIRD_PARTY_NOTICES.md
+# Real-world schemas for tests (see SCHEMA_FIXTURES in the README). Never
+# commit them: some (e.g. railML) are under licences that forbid redistribution.
+/tests/fixtures/
+*.xsd
+!/crates/core/tests/data/**/*.xsd

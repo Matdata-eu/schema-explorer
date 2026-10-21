@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>schema-explorer</title>
+    <meta name="description" content="Visual explorer for XML Schema (XSD): UML-like diagrams, content-model trees and readable pages, in your browser." />
+    <style>
+      html, body { margin: 0; height: 100%; background: #f5f7fa; color: #1b2733; }
+      @media (prefers-color-scheme: dark) { html, body { background: #0d141c; color: #dce4ec; } }
+      schema-explorer { display: block; height: 100%; }
+    </style>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <schema-explorer></schema-explorer>
+    <noscript>schema-explorer needs JavaScript.</noscript>
+  </body>
+</html>
