@@ -35,7 +35,8 @@ enum Command {
     /// shows their source. Without files, the viewer opens empty and indexes
     /// what is dropped on it in the browser.
     Serve {
-        /// Schema files or directories (every .xsd file in them).
+        /// Schema files or directories (every .xsd file in them, or every
+        /// .json/.yaml/.yml file when there is no .xsd file).
         files: Vec<PathBuf>,
         /// Address to listen on.
         #[arg(long, env = "SCHEMA_EXPLORER_BIND", default_value = "127.0.0.1:8080")]
@@ -46,8 +47,10 @@ enum Command {
     },
     /// Index schema files into a bundle for the viewer.
     ///
-    /// Directories are read recursively (every .xsd file); imports and
-    /// includes are followed from disk.
+    /// XML Schema (.xsd) or JSON Schema, OpenAPI and AsyncAPI (.json,
+    /// .yaml, .yml). Directories are read recursively (every .xsd file, or
+    /// every JSON and YAML file when there is no .xsd file); imports,
+    /// includes and `$ref`s to other files are followed from disk.
     Index {
         /// Schema files or directories.
         #[arg(required = true)]
@@ -65,8 +68,8 @@ enum Command {
     },
     /// Compare two versions of a schema set.
     ///
-    /// Each side is a schema file, a directory (every .xsd file in it) or a
-    /// bundle made with `index`; join several paths for one side with
+    /// Each side is a schema file (XSD, JSON Schema, OpenAPI or AsyncAPI),
+    /// a directory (every schema file in it) or a bundle made with `index`; join several paths for one side with
     /// commas. Components are matched by qualified name, and by kind and
     /// local name when the target namespace changed between the versions.
     Diff {
@@ -149,8 +152,21 @@ fn main() -> Result<()> {
     }
 }
 
-/// Every .xsd file under `path` (or `path` itself when it is a file).
-fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+fn is_schema_file(p: &Path) -> bool {
+    p.extension().is_some_and(|x| {
+        ["xsd", "json", "yaml", "yml"]
+            .iter()
+            .any(|e| x.eq_ignore_ascii_case(e))
+    })
+}
+
+fn is_xsd(p: &Path) -> bool {
+    p.extension().is_some_and(|x| x.eq_ignore_ascii_case("xsd"))
+}
+
+/// Every schema file under `path` (or `path` itself when it is a file):
+/// .xsd, .json, .yaml and .yml. `explicit` marks the files named directly.
+fn collect(path: &Path, explicit: bool, out: &mut Vec<(PathBuf, bool)>) -> Result<()> {
     if path.is_dir() {
         let mut entries: Vec<PathBuf> = std::fs::read_dir(path)
             .with_context(|| format!("reading {}", path.display()))?
@@ -158,12 +174,12 @@ fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
             .collect::<std::io::Result<_>>()?;
         entries.sort();
         for p in entries {
-            if p.is_dir() || p.extension().is_some_and(|x| x.eq_ignore_ascii_case("xsd")) {
-                collect(&p, out)?;
+            if p.is_dir() || is_schema_file(&p) {
+                collect(&p, false, out)?;
             }
         }
     } else if path.is_file() {
-        out.push(path.to_path_buf());
+        out.push((path.to_path_buf(), explicit));
     } else {
         bail!("{} not found", path.display());
     }
@@ -172,10 +188,17 @@ fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 
 /// Read and index the schema files; also returns every file read from disk.
 pub(crate) fn build(inputs: &[PathBuf], compact: bool) -> Result<(Bundle, Vec<PathBuf>)> {
-    let mut paths = Vec::new();
+    let mut found = Vec::new();
     for p in inputs {
-        collect(p, &mut paths)?;
+        collect(p, true, &mut found)?;
     }
+    // In directories with XSD files, the JSON and YAML files are not schemas.
+    let xsd = found.iter().any(|(p, _)| is_xsd(p));
+    let paths: Vec<PathBuf> = found
+        .into_iter()
+        .filter(|(p, explicit)| *explicit || !xsd || is_xsd(p))
+        .map(|(p, _)| p)
+        .collect();
     let sources = paths
         .iter()
         .map(|p| {
@@ -209,10 +232,12 @@ pub(crate) fn report(bundle: &Bundle) {
         let file = d
             .file
             .map_or("", |f| bundle.files[f as usize].name.as_str());
-        eprintln!(
-            "{:?}: {file}:{}: {} [{}]",
-            d.level, d.line, d.message, d.code
-        );
+        let line = if d.line > 0 {
+            format!(":{}", d.line)
+        } else {
+            String::new()
+        };
+        eprintln!("{:?}: {file}{line}: {} [{}]", d.level, d.message, d.code);
     }
 }
 
@@ -255,10 +280,15 @@ fn load_side(spec: &str) -> Result<Bundle> {
     {
         let text =
             std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
-        let mut b: Bundle = serde_json::from_str(&text)
-            .with_context(|| format!("{} is not a schema-explorer bundle", p.display()))?;
-        schema_explorer_core::expand(&mut b);
-        return Ok(b);
+        // A bundle has `format` and `components`; any other JSON is a schema.
+        let value: serde_json::Value = serde_json::from_str(&text)
+            .with_context(|| format!("{} is not valid JSON", p.display()))?;
+        if value.get("format").is_some() && value.get("components").is_some_and(|c| c.is_array()) {
+            let mut b: Bundle = serde_json::from_value(value)
+                .with_context(|| format!("{} is not a schema-explorer bundle", p.display()))?;
+            schema_explorer_core::expand(&mut b);
+            return Ok(b);
+        }
     }
     let (b, _) = build(&paths, false)?;
     report(&b);
