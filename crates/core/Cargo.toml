@@ -1,6 +1,6 @@
 [package]
 name = "schema-explorer-core"
-description = "Reads XML Schema (XSD) sets into one indexed model for the schema-explorer viewer"
+description = "Reads XML Schema (XSD) and JSON Schema (also OpenAPI and AsyncAPI) sets into one indexed model for the schema-explorer viewer"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,5 +12,6 @@ categories = ["parser-implementations", "visualization"]
 
 [dependencies]
 roxmltree = "0.21.1"
+serde_yaml_ng = "0.10"
 serde.workspace = true
 serde_json.workspace = true
