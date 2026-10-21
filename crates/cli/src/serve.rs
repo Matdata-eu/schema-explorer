@@ -127,7 +127,17 @@ async fn source(State(s): State<Arc<Loaded>>, Path(file): Path<usize>) -> Respon
         return (StatusCode::NOT_FOUND, "no such file").into_response();
     };
     match tokio::fs::read(path).await {
-        Ok(bytes) => with_type(bytes.into_response(), "application/xml", "no-cache"),
+        Ok(bytes) => {
+            let xml = path
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("xsd"));
+            let mime = if xml {
+                "application/xml"
+            } else {
+                "text/plain; charset=utf-8"
+            };
+            with_type(bytes.into_response(), mime, "no-cache")
+        }
         Err(e) => (StatusCode::NOT_FOUND, e.to_string()).into_response(),
     }
 }
