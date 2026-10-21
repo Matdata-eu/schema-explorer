@@ -210,7 +210,7 @@ function rowsToLines(m: Model, rows: ReturnType<Model["contentRows"]>, own: Id):
     let name: string;
     let detail: string;
     if (r.kind === "compositor") {
-      name = `${indent}${r.compositor}`;
+      name = `${indent}${m.b.language === "jsonSchema" ? (r.compositor === "choice" ? (r.max === null ? "anyOf" : "oneOf") : "properties") : r.compositor}`;
       detail = occursText(r.min, r.max);
     } else if (r.kind === "any") {
       name = `${indent}any`;

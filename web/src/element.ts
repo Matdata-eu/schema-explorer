@@ -15,8 +15,8 @@ function styles(): CSSStyleSheet {
 
 /**
  * Attributes:
- *  - `src`      URL of a bundle.json (or of a single .xsd file)
- *  - `sources`  base URL of the .xsd files, for the source view (default: next to the bundle)
+ *  - `src`      URL of a bundle.json (or of a single .xsd, JSON Schema, OpenAPI or AsyncAPI file)
+ *  - `sources`  base URL of the schema files, for the source view (default: next to the bundle)
  *  - `focus`    component to open first: `prefix:Name` or `ct/prefix:Name`
  *  - `theme`    light | dark | auto
  *  - `routing`  present: use location.hash for navigation (the standalone app)

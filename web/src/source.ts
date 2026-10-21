@@ -129,3 +129,78 @@ function resolve(m: Model, prefixes: Record<string, string>, qname: string, kind
   }
   return undefined;
 }
+
+const JSON_TOKEN = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b/g;
+const byPointer = new WeakMap<Model, Map<string, Id>>();
+
+/** The component a `$ref` written in `file` points to, by file and JSON pointer. */
+export function refTarget(m: Model, file: number, ref: string): Id | undefined {
+  let map = byPointer.get(m);
+  if (!map) {
+    map = new Map();
+    m.c.forEach((c, i) => {
+      if (c.json && c.file !== undefined && !map!.has(`${c.file}#${c.json.pointer ?? ""}`)) map!.set(`${c.file}#${c.json.pointer ?? ""}`, i);
+    });
+    byPointer.set(m, map);
+  }
+  const hash = ref.indexOf("#");
+  const path = hash < 0 ? ref : ref.slice(0, hash);
+  let ptr = hash < 0 ? "" : ref.slice(hash + 1);
+  try {
+    ptr = decodeURIComponent(ptr);
+  } catch {
+    /* keep as written */
+  }
+  let f = file;
+  if (path) {
+    if (/^[a-z][\w+.-]+:/i.test(path)) {
+      const tail = path.split("/").pop();
+      f = m.b.files.findIndex((x) => x.targetNamespace === path || (!!tail && x.name.split("/").pop() === tail));
+    } else {
+      const parts = (m.b.files[file]?.name ?? "").split("/").slice(0, -1);
+      for (const s of path.split("/")) {
+        if (s === "..") parts.pop();
+        else if (s && s !== ".") parts.push(s);
+      }
+      const want = parts.join("/");
+      f = m.b.files.findIndex((x) => x.name === want);
+    }
+    if (f < 0) return undefined;
+  }
+  return map.get(`${f}#${ptr}`);
+}
+
+/** Highlighted JSON with `$ref` values linked to their pages. */
+export function highlightJson(m: Model, file: number, text: string, link: (id: Id, text: string) => HTMLElement): HTMLElement {
+  const pre = document.createElement("pre");
+  pre.className = "xml json";
+  const span = (cls: string, t: string) => {
+    const s = document.createElement("span");
+    s.className = cls;
+    s.textContent = t;
+    return s;
+  };
+  let at = 0;
+  let lastKey = "";
+  for (const t of text.matchAll(JSON_TOKEN)) {
+    if (t.index > at) pre.append(text.slice(at, t.index));
+    at = t.index + t[0].length;
+    if (t[1] && t[2]) {
+      lastKey = t[1];
+      pre.append(span("t-attr", t[1]), t[2]);
+    } else if (t[1]) {
+      const target = /^"\$(ref|dynamicRef|recursiveRef)"$/.test(lastKey) ? refTarget(m, file, JSON.parse(t[1]) as string) : undefined;
+      if (target !== undefined) {
+        const a = link(target, t[1]);
+        a.classList.add("t-iri");
+        pre.append(a);
+      } else pre.append(span("t-str", t[1]));
+      lastKey = "";
+    } else {
+      pre.append(span("t-kw", t[0]));
+      lastKey = "";
+    }
+  }
+  pre.append(text.slice(at));
+  return pre;
+}

@@ -66,6 +66,7 @@ function typeBody(ctx: AppCtx, tid: Id, page: HTMLElement): void {
   }
   const attrs = m.attributes(tid);
   const ownA = attrs.filter((a) => a.from === tid).length;
+  if (m.b.language === "jsonSchema" && !attrs.length) return;
   page.append(section("Attributes", { count: attrs.length, tools: attrs.length > ownA ? [h("span", { class: "faint small" }, `${attrs.length - ownA} inherited`)] : [] }));
   page.append(attrs.length || ct.effective?.anyAttribute || ct.anyAttribute ? attrTable(ctx, tid, attrs, ct.effective?.anyAttribute ?? ct.anyAttribute) : emptyNote("No attributes."));
   if (ct.asserts?.length) page.append(section("Assertions", { count: ct.asserts.length }), h("ul", { class: "cons" }, ct.asserts.map((a) => h("li", null, h("code", null, a)))));
@@ -79,7 +80,7 @@ function typeBody(ctx: AppCtx, tid: Id, page: HTMLElement): void {
 export function contentTable(ctx: AppCtx, tid: Id, rows: ContentRow[], showInherited: boolean): HTMLElement {
   const m = ctx.m;
   const table = h("table", { class: "ptable cm" });
-  table.appendChild(h("thead", null, h("tr", null, h("th", null, "Element"), h("th", null, "Type"), h("th", null, "Card."), h("th", null, "Documentation"))));
+  table.appendChild(h("thead", null, h("tr", null, h("th", null, KIND_LABEL.element), h("th", null, "Type"), h("th", null, "Card."), h("th", null, "Documentation"))));
   let body = h("tbody");
   table.appendChild(body);
   let from: Id | undefined;
@@ -96,7 +97,7 @@ export function contentTable(ctx: AppCtx, tid: Id, rows: ContentRow[], showInher
           const t = (ev.currentTarget as HTMLElement).closest("tbody")!;
           const shut = t.classList.toggle("folded");
           (ev.currentTarget as HTMLElement).setAttribute("aria-expanded", String(!shut));
-        } }, "▾ ") : null, inherited ? "Inherited from " : "Declared in ", link(ctx, r.from), h("span", { class: "faint" }, ` · ${plural(n, "element")}`)));
+        } }, "▾ ") : null, inherited ? "Inherited from " : "Declared in ", link(ctx, r.from), h("span", { class: "faint" }, ` · ${plural(n, KIND_LABEL.element.toLowerCase())}`)));
         body.appendChild(head);
         table.appendChild(body);
       }
@@ -112,14 +113,18 @@ function contentRow(ctx: AppCtx, r: ContentRow, inherited: boolean): HTMLElement
   const pad = { paddingLeft: `${10 + r.depth * 18}px` };
   const card = occursText(r.min, r.max);
   const cls = `${inherited ? "inherited" : ""}${r.inChoice ? " in-choice" : ""}`;
+  const json = m.b.language === "jsonSchema";
   if (r.kind === "compositor") {
-    return h("tr", { class: `${cls} comp-row` }, h("td", { style: pad, colspan: 2 }, h("span", { class: `compositor c-${r.compositor}` }, r.compositor)), h("td", { class: "mult" }, card), h("td", { class: "faint small" }, r.compositor === "choice" ? "one of the following" : r.compositor === "all" ? "all, in any order" : ""));
+    const name = json ? (r.compositor === "choice" ? (r.max === null ? "anyOf" : "oneOf") : "properties") : r.compositor;
+    const note = r.compositor === "choice" ? (json && r.max === null ? "one or more of the following" : "one of the following") : r.compositor === "all" ? (json ? "in any order" : "all, in any order") : "";
+    return h("tr", { class: `${cls} comp-row` }, h("td", { style: pad, colspan: 2 }, h("span", { class: `compositor c-${r.compositor}` }, name)), h("td", { class: "mult" }, json && r.compositor === "choice" ? "" : card), h("td", { class: "faint small" }, note));
   }
   if (r.kind === "group") {
     return h("tr", { class: `${cls} comp-row` }, h("td", { style: pad, colspan: 2 }, h("span", { class: "compositor c-group" }, "group "), r.id !== undefined ? link(ctx, r.id, m.qname(r.id)) : h("span", { class: "missing" }, m.refName(r.missing))), h("td", { class: "mult" }, card), h("td", null, r.id !== undefined ? shortDoc(m.comp(r.id).docs) : null));
   }
   if (r.kind === "any") {
     const w = r.wildcard!;
+    if (json) return h("tr", { class: cls }, h("td", { style: pad }, h("span", { class: "mono" }, "*")), h("td", { class: "mono small" }, "any"), h("td", { class: "mult" }, card), h("td", { class: "faint small" }, "additional properties"));
     return h("tr", { class: cls }, h("td", { style: pad }, h("span", { class: "mono" }, "any")), h("td", { class: "mono small" }, w.namespace ?? "##any", w.processContents ? h("span", { class: "faint" }, ` (${w.processContents})`) : null), h("td", { class: "mult" }, card), h("td", null));
   }
   const id = r.id;
@@ -133,7 +138,7 @@ function contentRow(ctx: AppCtx, r: ContentRow, inherited: boolean): HTMLElement
     "tr",
     { class: cls },
     h("td", { class: "pname", style: pad }, link(ctx, id, el.name ?? ""), isRef ? h("span", { class: "role", title: "a reference to a global element" }, "ref") : null, el.element?.abstract ? h("span", { class: "role" }, "abstract") : null, (el.element?.members?.length ?? 0) > 0 ? h("span", { class: "role", title: "elements of its substitution group may appear instead" }, `+${el.element!.members!.length} substitutes`) : null),
-    h("td", { class: "rng" }, t === undefined ? h("span", { class: "faint" }, "anyType") : isId(t) && !m.comp(t).name ? link(ctx, t, "anonymous") : refLink(ctx, t, true)),
+    h("td", { class: "rng" }, el.json?.array ? h("span", { class: "faint" }, "array of ") : null, t === undefined ? h("span", { class: "faint" }, json ? "any" : "anyType") : isId(t) && !m.comp(t).name ? link(ctx, t, json ? `inline ${m.comp(t).json?.kind || "schema"}` : "anonymous") : refLink(ctx, t, true), el.json?.deprecated ? h("span", { class: "role" }, "deprecated") : null, el.json?.readOnly ? h("span", { class: "role" }, "read-only") : null, el.json?.writeOnly ? h("span", { class: "role" }, "write-only") : null),
     h("td", { class: "mult" }, card, el.element?.nillable ? h("div", { class: "faint small" }, "nillable") : null),
     h("td", null, docs ? shortDoc(docs) : typeDoc ? h("div", { class: "faint" }, shortDoc(typeDoc)) : null)
   );

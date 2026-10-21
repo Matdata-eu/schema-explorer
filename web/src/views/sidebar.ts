@@ -3,7 +3,7 @@
 // types (NeTEx has about 2,600 complex types) scroll smoothly.
 import type { AppCtx } from "../ctx";
 import { debounce, h, icon, plural } from "../dom";
-import { KIND_LABEL, type Id } from "../model";
+import { KIND_LABEL, TERMS, type Id } from "../model";
 
 type Tab = "complexType" | "simpleType" | "element" | "groups" | "files";
 
@@ -132,8 +132,8 @@ export function sidebar(ctx: AppCtx): Sidebar {
 
   const groupsCount = m.lists.group.length + m.lists.attributeGroup.length + m.lists.attribute.length;
   const tabDefs: { id: Tab; label: string; count: number; title: string }[] = [
-    { id: "complexType", label: "Types", count: m.lists.complexType.length, title: "Complex types" },
-    { id: "simpleType", label: "Simple", count: m.lists.simpleType.length, title: "Simple types" },
+    { id: "complexType", label: TERMS.typesTab, count: m.lists.complexType.length, title: TERMS.complexTypes[0].toUpperCase() + TERMS.complexTypes.slice(1) },
+    { id: "simpleType", label: TERMS.simpleTab, count: m.lists.simpleType.length, title: TERMS.simpleTypes[0].toUpperCase() + TERMS.simpleTypes.slice(1) },
     { id: "element", label: "Elements", count: m.lists.element.length, title: "Global elements" },
     { id: "groups", label: "Groups", count: groupsCount, title: "Groups, attribute groups and global attributes" },
     { id: "files", label: "Files", count: m.b.files.length, title: "Schema files" },

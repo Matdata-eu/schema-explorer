@@ -2,8 +2,8 @@
 import type { AppCtx, Prefs, Route } from "./ctx";
 import { button, copyText, h, icon, plural, type Child } from "./dom";
 import { Compare } from "./diff";
-import { diffBundles, fetchBundleFromServer, indexFiles, loadUrl, memorySources, readDataTransfer, readFiles, serverSources, serverStatus, urlSources, type LoadProgress, type NamedBytes, type ServerStatus, type SourceProvider } from "./loader";
-import { KIND_SLUG, Model, type Bundle, type Id } from "./model";
+import { bundleFile, diffBundles, fetchBundleFromServer, indexFiles, loadUrl, memorySources, readDataTransfer, readFiles, schemaFiles, serverSources, serverStatus, urlSources, type LoadProgress, type NamedBytes, type ServerStatus, type SourceProvider } from "./loader";
+import { KIND_SLUG, Model, TERMS, type Bundle, type Id } from "./model";
 import { matdataMark } from "./logo";
 import { openAbout, openHelp } from "./views/dialogs";
 import { homePage } from "./views/home";
@@ -347,18 +347,17 @@ export class App implements AppCtx {
         for (const k of ["src", "bundle", "sources"]) u.searchParams.delete(k);
         history.replaceState(history.state, "", u.toString());
       }
-      if (named.length === 0) throw new Error("none of the files is an XML Schema (.xsd) or a bundle (.json)");
+      if (named.length === 0) throw new Error("none of the files is a schema (.xsd, .json, .yaml) or a bundle (.json)");
       // A single bundle file loads directly.
-      if (named.length === 1 && /\.json$/i.test(named[0].name)) {
-        const b = JSON.parse(new TextDecoder().decode(named[0].bytes)) as Bundle;
-        if (!b || !Array.isArray(b.components)) throw new Error("this JSON file is not a schema-explorer bundle");
+      const single = bundleFile(named);
+      if (single) {
         this.source = { kind: "files" };
         this.sources = null;
-        this.setBundle(b);
+        this.setBundle(single);
         return;
       }
-      const xsd = named.filter((f) => /\.xsd$/i.test(f.name));
-      if (xsd.length === 0) throw new Error("no .xsd files among the files");
+      const xsd = schemaFiles(named);
+      if (xsd.length === 0) throw new Error("no schema files (.xsd, .json, .yaml) among the files");
       // Folders keep their relative paths, so imports and includes resolve.
       this.showProgress({ stage: "index", detail: xsd.length === 1 ? xsd[0].name : `${xsd.length} files` });
       const started = performance.now();
@@ -376,15 +375,12 @@ export class App implements AppCtx {
     }
   }
 
-  /** Read picked or dropped files into a bundle: one bundle file, or .xsd files indexed here. */
+  /** Read picked or dropped files into a bundle: one bundle file, or schema files indexed here. */
   private async bundleFromFiles(named: NamedBytes[]): Promise<Bundle> {
-    if (named.length === 1 && /\.json$/i.test(named[0].name)) {
-      const b = JSON.parse(new TextDecoder().decode(named[0].bytes)) as Bundle;
-      if (!b || !Array.isArray(b.components)) throw new Error("this JSON file is not a schema-explorer bundle");
-      return b;
-    }
-    const xsd = named.filter((f) => /\.xsd$/i.test(f.name));
-    if (xsd.length === 0) throw new Error("no .xsd files among the files");
+    const single = bundleFile(named);
+    if (single) return single;
+    const xsd = schemaFiles(named);
+    if (xsd.length === 0) throw new Error("no schema files (.xsd, .json, .yaml) among the files");
     const b = await indexFiles(xsd, (p) => this.showProgress(p));
     const top = new Set(xsd.map((f) => (f.name.includes("/") ? f.name.split("/")[0] : "")));
     if (top.size === 1 && !top.has("")) b.title = [...top][0];
@@ -414,7 +410,7 @@ export class App implements AppCtx {
         this.sources = urlSources(newer.sources ? new URL(newer.sources, document.baseURI).href : abs);
       } else {
         this.source = { kind: "files" };
-        this.sources = memorySources(newer.files.filter((f) => /\.xsd$/i.test(f.name)));
+        this.sources = memorySources(schemaFiles(newer.files));
       }
       const oldUrl = "url" in older ? older.url : undefined;
       if (this.opts.routing) {
@@ -450,9 +446,9 @@ export class App implements AppCtx {
         go.disabled = !(sides[0] && sides[1]);
       };
       const pick = (files: FileList | null) => {
-        if (files?.length) void readFiles(files).then((f) => set(f.length ? { files: f } : null, f.length ? plural(f.length, "file") : "no .xsd files"));
+        if (files?.length) void readFiles(files).then((f) => set(f.length ? { files: f } : null, f.length ? plural(f.length, "file") : "no schema files"));
       };
-      const fileInput = h("input", { type: "file", multiple: true, accept: ".xsd,.json", hidden: true, onChange: (ev: Event) => pick((ev.target as HTMLInputElement).files) }) as HTMLInputElement;
+      const fileInput = h("input", { type: "file", multiple: true, accept: ".xsd,.json,.yaml,.yml", hidden: true, onChange: (ev: Event) => pick((ev.target as HTMLInputElement).files) }) as HTMLInputElement;
       const dirInput = h("input", { type: "file", multiple: true, hidden: true, webkitdirectory: true, onChange: (ev: Event) => pick((ev.target as HTMLInputElement).files) }) as HTMLInputElement;
       const url = h("input", { class: "input", type: "url", placeholder: "or the address of a bundle", "aria-label": `${title}: address of a bundle or an XSD file`, onInput: (ev: Event) => {
         const v = (ev.target as HTMLInputElement).value.trim();
@@ -479,7 +475,7 @@ export class App implements AppCtx {
         ev.stopPropagation();
         z.classList.remove("over");
         status.textContent = "reading…";
-        void readDataTransfer(ev.dataTransfer).then((f) => set(f.length ? { files: f } : null, f.length ? plural(f.length, "file") : "no .xsd files"));
+        void readDataTransfer(ev.dataTransfer).then((f) => set(f.length ? { files: f } : null, f.length ? plural(f.length, "file") : "no schema files"));
       });
       return z;
     };
@@ -585,10 +581,10 @@ export class App implements AppCtx {
       ev.preventDefault();
       if (this.model) this.goRoute({ view: "home" });
       else this.showOpen();
-    } }, matdataMark(), h("span", { class: "title-text" }, m?.title ?? "schema-explorer"), m ? h("small", { class: "hide-mobile" }, `${(m.b.stats.global.complexType ?? 0).toLocaleString()} complex types`) : null));
+    } }, matdataMark(), h("span", { class: "title-text" }, m?.title ?? "schema-explorer"), m ? h("small", { class: "hide-mobile" }, `${(m.b.stats.global.complexType ?? 0).toLocaleString()} ${TERMS.complexTypes}`) : null));
     t.appendChild(h("span", { class: "spacer" }));
     if (m && this._cmp) t.appendChild(button("Changes", () => this.goRoute({ view: "diff" }), { icon: "table", cls: "small", title: `What changed since ${this._cmp.oldTitle}` }));
-    if (m) t.appendChild(button("Map", () => this.goRoute({ view: "overview" }), { icon: "map", cls: "small hide-mobile", title: "Overview map of the complex types" }));
+    if (m) t.appendChild(button("Map", () => this.goRoute({ view: "overview" }), { icon: "map", cls: "small hide-mobile", title: `Overview map of the ${TERMS.complexTypes}` }));
     if (m) t.appendChild(button("Share", () => void this.share(), { icon: "share", cls: "small share-btn", title: "Copy a link to exactly this view" }));
     if (m) t.appendChild(button("Open…", () => this.showOpen(), { icon: "folder", cls: "small hide-mobile", title: "Load other schemas" }));
     const dark = this.isDark();
@@ -617,7 +613,7 @@ export class App implements AppCtx {
 
   // ---- open / progress / errors --------------------------------------------
   showOpen(): void {
-    const fileInput = h("input", { type: "file", multiple: true, accept: ".xsd,.json", hidden: true, onChange: (ev: Event) => {
+    const fileInput = h("input", { type: "file", multiple: true, accept: ".xsd,.json,.yaml,.yml", hidden: true, onChange: (ev: Event) => {
       const files = (ev.target as HTMLInputElement).files;
       if (files?.length) void this.openFiles(files);
     } }) as HTMLInputElement;
@@ -629,7 +625,7 @@ export class App implements AppCtx {
       "div",
       { class: "dropzone" },
       icon("folder", "drop-icon"),
-      h("p", null, h("strong", null, "Drop .xsd files or folders here"), h("br"), "or ", h("button", { type: "button", class: "linkish", onClick: () => fileInput.click() }, "choose files"), " · ", h("button", { type: "button", class: "linkish", onClick: () => dirInput.click() }, "choose a folder")),
+      h("p", null, h("strong", null, "Drop .xsd, .json or .yaml files or folders here"), h("br"), "or ", h("button", { type: "button", class: "linkish", onClick: () => fileInput.click() }, "choose files"), " · ", h("button", { type: "button", class: "linkish", onClick: () => dirInput.click() }, "choose a folder")),
       h("p", { class: "muted small" }, "Include the files the schema imports and includes. A bundle made with ", h("code", null, "schema-explorer index"), " (.json) works too."),
       fileInput,
       dirInput
@@ -652,7 +648,7 @@ export class App implements AppCtx {
         "div",
         { class: "open-grid" },
         h("section", { class: "card open-card" }, h("h2", null, "From your computer"), drop),
-        h("section", { class: "card open-card" }, h("h2", null, "From the web"), h("p", { class: "muted" }, "The address of a bundle made with ", h("code", null, "schema-explorer index"), ", or of a single .xsd file."), form, h("p", { class: "muted small" }, "Add ", h("code", null, "?bundle="), " and the address to this page's link to open it straight away. The site must allow cross-origin requests."))
+        h("section", { class: "card open-card" }, h("h2", null, "From the web"), h("p", { class: "muted" }, "The address of a bundle made with ", h("code", null, "schema-explorer index"), ", or of a single .xsd, JSON Schema, OpenAPI or AsyncAPI file."), form, h("p", { class: "muted small" }, "Add ", h("code", null, "?bundle="), " and the address to this page's link to open it straight away. The site must allow cross-origin requests."))
       ),
       this.compareCard(),
       examples

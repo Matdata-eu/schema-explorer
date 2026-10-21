@@ -1,7 +1,7 @@
 // The start page of a schema set: size, namespaces, where to begin, problems.
 import type { AppCtx } from "../ctx";
 import { button, h, plural } from "../dom";
-import type { Id } from "../model";
+import { TERMS, type Id } from "../model";
 import { chips, section } from "./common";
 
 export function homePage(ctx: AppCtx): HTMLElement {
@@ -9,7 +9,8 @@ export function homePage(ctx: AppCtx): HTMLElement {
   const b = m.b;
   const st = b.stats;
   const page = h("div");
-  page.appendChild(h("div", { class: "page-head" }, h("h1", null, m.title), h("span", { class: "badge" }, "XML Schema")));
+  const json = b.language === "jsonSchema";
+  page.appendChild(h("div", { class: "page-head" }, h("h1", null, m.title), h("span", { class: "badge" }, json ? dialects(b.files) : "XML Schema")));
   const inputs = b.files.filter((f) => f.input).map((f) => f.name);
   page.appendChild(h("p", { class: "muted small" }, `${plural(b.files.length, "file")}${inputs.length && inputs.length < b.files.length ? `, from ${inputs.slice(0, 3).join(", ")}${inputs.length > 3 ? ` and ${inputs.length - 3} more` : ""}` : ""} · indexed by ${b.generator}`));
   const g = st.global;
@@ -18,16 +19,21 @@ export function homePage(ctx: AppCtx): HTMLElement {
     h(
       "div",
       { class: "stats" },
-      stat(g.complexType, "complex types", () => ctx.goRoute({ view: "overview" })),
-      stat(g.simpleType, "simple types"),
+      stat(g.complexType, TERMS.complexTypes, () => ctx.goRoute({ view: "overview" })),
+      stat(g.simpleType, TERMS.simpleTypes),
       stat(g.element, "global elements"),
       stat((g.group ?? 0) + (g.attributeGroup ?? 0), "groups"),
-      stat(st.local.element, "local elements"),
+      stat(st.local.element, json ? "properties" : "local elements"),
       stat(st.enumerations, "enumeration values"),
       stat(b.files.length, "files")
     )
   );
   page.appendChild(section("Start here", { tools: [button("Overview map", () => ctx.goRoute({ view: "overview" }), { icon: "map", cls: "small" })] }));
+  const fileRoots = json ? m.lists.complexType.concat(m.lists.simpleType).filter((id) => !m.c[id].json?.pointer) : [];
+  if (fileRoots.length) {
+    page.appendChild(h("p", { class: "muted small" }, "The root schemas of the files."));
+    page.appendChild(chips(ctx, fileRoots, { max: 24 }));
+  }
   const roots = m.rootElements();
   if (roots.length) {
     page.appendChild(h("p", { class: "muted small" }, "Global elements nothing else refers to: the likely document roots."));
@@ -39,7 +45,7 @@ export function homePage(ctx: AppCtx): HTMLElement {
     .slice(0, 24)
     .map((x) => x.id as Id);
   if (popular.length) {
-    page.appendChild(h("p", { class: "muted small" }, "The most used and most extended complex types."));
+    page.appendChild(h("p", { class: "muted small" }, `The most used and most extended ${TERMS.complexTypes}.`));
     page.appendChild(chips(ctx, popular, { max: 24 }));
   }
   // Namespaces.
@@ -54,7 +60,7 @@ export function homePage(ctx: AppCtx): HTMLElement {
       h(
         "table",
         { class: "ptable compact" },
-        h("thead", null, h("tr", null, h("th", null, "Prefix"), h("th", null, "Namespace"), h("th", null, "Complex"), h("th", null, "Simple"), h("th", null, "Elements"))),
+        h("thead", null, h("tr", null, h("th", null, "Prefix"), h("th", null, "Namespace"), h("th", null, json ? "Objects" : "Complex"), h("th", null, json ? "Scalars" : "Simple"), h("th", null, json ? "" : "Elements"))),
         h("tbody", null, nsRows.map((x) => h("tr", null, h("td", { class: "mono" }, x.n.prefix), h("td", { class: "mono small" }, x.n.uri), h("td", null, h("a", { href: ctx.hrefRoute({ view: "overview", params: { ns: String(x.i) } }), onClick: (ev: Event) => {
           ev.preventDefault();
           ctx.goRoute({ view: "overview", params: { ns: String(x.i) } });
@@ -75,4 +81,11 @@ export function homePage(ctx: AppCtx): HTMLElement {
     );
   }
   return page;
+}
+
+/** The schema languages of JSON files: "JSON Schema 2020-12", "OpenAPI 3.0.3", ... */
+function dialects(files: { dialect?: string; input?: boolean }[]): string {
+  const set = new Set(files.filter((f) => f.input && f.dialect).map((f) => f.dialect!));
+  if (set.size === 0) for (const f of files) if (f.dialect) set.add(f.dialect);
+  return [...set].slice(0, 2).join(", ") || "JSON Schema";
 }

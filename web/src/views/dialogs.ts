@@ -63,7 +63,7 @@ export function openHelp(host: HTMLElement): void {
     section(
       "Getting started",
       true,
-      ["Drop ", code(".xsd"), " files or whole folders on the open page, or ", b("choose files"), " or ", b("choose a folder"), ". Give every file the schema imports or includes: they are found by their relative path, or else by file name or namespace."],
+      ["Drop ", code(".xsd"), " files, JSON Schema, OpenAPI or AsyncAPI files (", code(".json"), ", ", code(".yaml"), ") or whole folders on the open page, or ", b("choose files"), " or ", b("choose a folder"), ". Give every file the schema imports, includes or names in a ", code("$ref"), ": they are found by their relative path, or else by file name or namespace."],
       ["Files are indexed in your browser (WebAssembly); nothing is uploaded. A bundle made with ", code("schema-explorer index"), " opens by its address, or with ", code("?bundle=<url>"), " added to this page's link."],
       [code("schema-explorer serve <files or folders>"), " opens the viewer on your own computer with the schemas already loaded."]
     ),
@@ -79,7 +79,7 @@ export function openHelp(host: HTMLElement): void {
       ["The top card shows the ", b("derivation"), " chain (extension or restriction) up to the root, the derived types and the global elements of this type."],
       [b("Content model"), " lists the child elements in order with their type and cardinality. ", code("sequence"), ", ", code("choice"), " and ", code("all"), " appear as indented rows; group references are expanded under their name. Rows inherited from base types are grouped per base type and can be folded; ", b("inherited"), " shows or hides them."],
       [b("Attributes"), " lists every attribute, inherited and from attribute groups, with its type, use and default or fixed value."],
-      [b("Where used"), " lists the types, elements and groups that refer to the type, and ", b("XSD source"), " shows the declaration as written, with links on the type names."]
+      [b("Where used"), " lists the types, elements and groups that refer to the type, and ", b("XSD source"), " (or ", b("JSON source"), ") shows the declaration as written, with links on the type names."]
     ),
     section(
       "Diagrams",

@@ -1,4 +1,4 @@
-// Getting a bundle from somewhere: a bundle URL, dropped .xsd files and
+// Getting a bundle from somewhere: a bundle URL, dropped schema files and
 // folders (indexed in a WebAssembly worker), or the local `serve` server.
 import type { SchemaDiff } from "./diff";
 import type { Bundle } from "./model";
@@ -44,7 +44,7 @@ export async function fetchBundleFromServer(progress?: (p: LoadProgress) => void
   return checkBundle(JSON.parse(new TextDecoder().decode(await readWithProgress(r, progress))), progress);
 }
 
-/** Load a URL: a bundle (JSON) or a single .xsd file. */
+/** Load a URL: a bundle (JSON) or a single schema file (.xsd, JSON Schema, OpenAPI, AsyncAPI). */
 export async function loadUrl(url: string, progress?: (p: LoadProgress) => void): Promise<Bundle> {
   const abs = new URL(url, document.baseURI).href;
   progress?.({ stage: "download", detail: abs });
@@ -60,12 +60,14 @@ export async function loadUrl(url: string, progress?: (p: LoadProgress) => void)
   if (/\.xsd$/i.test(name) || bytes[0] === 0x3c || (bytes[0] === 0xef && bytes[3] === 0x3c)) {
     return indexFiles([{ name, bytes }], progress);
   }
+  if (/\.ya?ml$/i.test(name)) return indexFiles([{ name, bytes }], progress);
   let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    throw new Error(`${abs} is neither a schema-explorer bundle (JSON) nor an XSD file`);
+    throw new Error(`${abs} is neither a schema-explorer bundle (JSON) nor a schema file`);
   }
+  if (!isBundle(parsed)) return indexFiles([{ name: /\.json$/i.test(name) ? name : "schema.json", bytes }], progress);
   return checkBundle(parsed, progress);
 }
 
@@ -122,7 +124,7 @@ function call(msg: Record<string, unknown>, transfer: Transferable[] = []): Prom
   });
 }
 
-/** Index XSD files in the browser (WebAssembly, in a worker). */
+/** Index schema files in the browser (WebAssembly, in a worker). */
 export async function indexFiles(files: NamedBytes[], progress?: (p: LoadProgress) => void): Promise<Bundle> {
   progress?.({ stage: "index", detail: files.length === 1 ? files[0].name : `${files.length} files` });
   // Copies go to the worker; the originals stay here for the source view.
@@ -142,7 +144,37 @@ export function diffReport(d: SchemaDiff, format: "md" | "html"): Promise<string
   return call({ op: "report", json: JSON.stringify(d), format });
 }
 
-/** Read dropped or picked files; directories are walked for .xsd files. */
+/** Schema file names: XSD, and JSON or YAML (JSON Schema, OpenAPI, AsyncAPI, or a bundle). */
+export const SCHEMA_FILE = /\.(xsd|json|ya?ml)$/i;
+
+/** A bundle made by `schema-explorer index`, as opposed to a JSON Schema. */
+export function isBundle(x: unknown): x is Bundle {
+  return !!x && typeof x === "object" && typeof (x as Bundle).format === "number" && Array.isArray((x as Bundle).components);
+}
+
+/** The single dropped file when it is a bundle. */
+export function bundleFile(named: NamedBytes[]): Bundle | null {
+  if (named.length !== 1 || !/\.json$/i.test(named[0].name)) return null;
+  try {
+    const x: unknown = JSON.parse(new TextDecoder().decode(named[0].bytes));
+    return isBundle(x) ? x : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The files to index: the .xsd files, or else the JSON and YAML files. */
+export function schemaFiles(named: NamedBytes[]): NamedBytes[] {
+  const xsd = named.filter((f) => /\.xsd$/i.test(f.name));
+  return xsd.length ? xsd : named.filter((f) => /\.(json|ya?ml)$/i.test(f.name));
+}
+
+/** The schema at a JSON pointer of a JSON or YAML file, as indented JSON. */
+export function jsonSource(name: string, text: string, pointer: string): Promise<string> {
+  return call({ op: "source", name, text, pointer });
+}
+
+/** Read dropped or picked files; directories are walked for schema files. */
 export async function readDataTransfer(dt: DataTransfer): Promise<NamedBytes[]> {
   const entries = Array.from(dt.items)
     .map((i) => (i.kind === "file" ? i.webkitGetAsEntry?.() : null))
@@ -151,7 +183,7 @@ export async function readDataTransfer(dt: DataTransfer): Promise<NamedBytes[]> 
   const out: NamedBytes[] = [];
   const walk = async (e: FileSystemEntry, path: string): Promise<void> => {
     if (e.isFile) {
-      if (!/\.(xsd|json)$/i.test(e.name)) return;
+      if (!SCHEMA_FILE.test(e.name)) return;
       const file = await new Promise<File>((res, rej) => (e as FileSystemFileEntry).file(res, rej));
       out.push({ name: path + e.name, bytes: new Uint8Array(await file.arrayBuffer()) });
     } else if (e.isDirectory) {
@@ -170,7 +202,7 @@ export async function readDataTransfer(dt: DataTransfer): Promise<NamedBytes[]> 
 export async function readFiles(list: FileList | File[]): Promise<NamedBytes[]> {
   const out: NamedBytes[] = [];
   for (const f of Array.from(list)) {
-    if (!/\.(xsd|json)$/i.test(f.name)) continue;
+    if (!SCHEMA_FILE.test(f.name)) continue;
     out.push({ name: f.webkitRelativePath || f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
   }
   return out;
@@ -204,7 +236,9 @@ export function urlSources(base: string): SourceProvider {
       const r = await fetch(new URL(name.split("/").map(encodeURIComponent).join("/"), base));
       if (!r.ok) return null;
       const text = await r.text();
-      return text.trimStart().startsWith("<") ? text : null;
+      // A web server answering with its HTML page is not the file.
+      const html = /^<(!doctype html|html)/i.test(text.trimStart());
+      return text.trimStart().startsWith("<") || /\.(json|ya?ml)$/i.test(name) ? (html ? null : text) : null;
     } catch {
       return null;
     }
