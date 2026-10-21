@@ -157,6 +157,10 @@ export class Compare {
   readonly byNew = new Map<Id, ComponentDiff>();
   readonly byOld = new Map<Id, ComponentDiff>();
   private marks = new Map<Id, ChildMarks>();
+  private oldSources: ((file: number, name: string) => Promise<string | null>) | null = null;
+  private oldCache = new Map<number, Promise<string | null>>();
+  /** Where the earlier version's .xsd files are, when given apart from its bundle (for share links). */
+  oldSourcesUrl?: string;
 
   constructor(
     readonly old: Model,
@@ -169,6 +173,24 @@ export class Compare {
       if (c.new) this.byNew.set(c.new.id, c);
       if (c.old) this.byOld.set(c.old.id, c);
     }
+  }
+
+  /** Where the text of the earlier version's schema files comes from. */
+  setOldSources(p: (file: number, name: string) => Promise<string | null>, url?: string): void {
+    this.oldSources = p;
+    this.oldSourcesUrl = url;
+    this.oldCache.clear();
+  }
+
+  /** The text of a schema file of the earlier version, when it can be had. */
+  oldSourceText(file: number): Promise<string | null> {
+    if (!this.oldSources) return Promise.resolve(null);
+    let p = this.oldCache.get(file);
+    if (!p) {
+      p = this.oldSources(file, this.old.b.files[file]?.name ?? "");
+      this.oldCache.set(file, p);
+    }
+    return p;
   }
 
   get oldTitle(): string {

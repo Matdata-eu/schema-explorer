@@ -8,7 +8,8 @@ import { matdataMark } from "./logo";
 import { openAbout, openHelp } from "./views/dialogs";
 import { homePage } from "./views/home";
 import { overviewPage } from "./views/overview";
-import { diffBanner, diffComponentPage, diffOverviewPage } from "./views/compare";
+import { diffBanner, diffComponentPage, diffLink, diffOverviewPage } from "./views/compare";
+import { oldVersionBanner, versionCtx } from "./views/sideBySide";
 import { componentPage, filePage } from "./views/pages";
 import { sidebar, type Sidebar } from "./views/sidebar";
 
@@ -173,6 +174,8 @@ export class App implements AppCtx {
     }
     if (this._cmp?.oldUrl) u.searchParams.set("compare", this._cmp.oldUrl);
     else u.searchParams.delete("compare");
+    if (this._cmp?.oldUrl && this._cmp.oldSourcesUrl) u.searchParams.set("compareSources", this._cmp.oldSourcesUrl);
+    else u.searchParams.delete("compareSources");
     const complete = this.source?.kind !== "files" && (!this._cmp || !!this._cmp.oldUrl);
     return { url: u.toString(), complete };
   }
@@ -220,6 +223,10 @@ export class App implements AppCtx {
     if (r.view === "comp" && r.id !== undefined && this.model) {
       const c = this.model.comp(r.id);
       path = c.parent === undefined && c.name ? `#/${KIND_SLUG[c.kind]}/${encodeURIComponent(this.model.qname(r.id))}` : `#/id/${r.id}`;
+    } else if (r.view === "old" && r.id !== undefined && this._cmp) {
+      const om = this._cmp.old;
+      const c = om.comp(r.id);
+      path = c.parent === undefined && c.name ? `#/old/${KIND_SLUG[c.kind]}/${encodeURIComponent(om.qname(r.id))}` : `#/old/id/${r.id}`;
     } else if (r.view === "file" && r.id !== undefined) path = `#/file/${r.id}`;
     else if (r.view === "diffc" && r.query) {
       const i = r.query.indexOf("/");
@@ -242,8 +249,14 @@ export class App implements AppCtx {
     if (!m) return { view: "home", params };
     if (parts[0] === "overview") return { view: "overview", params };
     if (parts[0] === "diff") {
-      if (parts.length >= 3) return { view: "diffc", query: `${parts[1]}/${decodeURIComponent(parts.slice(2).join("/"))}`, params };
+      if (parts.length >= 3) return { view: "diffc", query: `${parts[1]}/${decodeURIComponent(parts.slice(2).join("/"))}`, tab, params };
       return { view: "diff", params };
+    }
+    if (parts[0] === "old" && this._cmp && parts.length >= 3) {
+      const om = this._cmp.old;
+      const id = parts[1] === "id" ? Number(parts[2]) : om.find(parts[1], decodeURIComponent(parts.slice(2).join("/")));
+      if (id !== undefined && Number.isInteger(id) && om.c[id]) return { view: "old", id, tab, params };
+      return { view: "missing", query: decodeURIComponent(parts.slice(2).join("/")), params };
     }
     if (parts[0] === "file" && parts[1] !== undefined) {
       const n = Number(parts[1]);
@@ -288,10 +301,10 @@ export class App implements AppCtx {
   }
 
   // ---- loading ------------------------------------------------------------
-  async start(src?: string | null, focus?: string | null, sources?: string | null, compare?: string | null): Promise<void> {
+  async start(src?: string | null, focus?: string | null, sources?: string | null, compare?: string | null, compareSources?: string | null): Promise<void> {
     this.server = await serverStatus();
     if (src && compare) {
-      await this.openCompare({ url: compare }, { url: src, sources: sources ?? undefined });
+      await this.openCompare({ url: compare, sources: compareSources ?? undefined }, { url: src, sources: sources ?? undefined });
       return;
     }
     if (src) {
@@ -413,6 +426,7 @@ export class App implements AppCtx {
         this.sources = memorySources(schemaFiles(newer.files));
       }
       const oldUrl = "url" in older ? older.url : undefined;
+      const oldSources = "url" in older ? urlSources(new URL(older.sources ?? older.url, document.baseURI).href) : memorySources(older.files.filter((f) => /\.xsd$/i.test(f.name)));
       if (this.opts.routing) {
         const u = new URL(location.href);
         u.searchParams.delete("src");
@@ -420,10 +434,12 @@ export class App implements AppCtx {
         else u.searchParams.delete("bundle");
         if (oldUrl && "url" in newer) u.searchParams.set("compare", oldUrl);
         else u.searchParams.delete("compare");
+        if (oldUrl && "url" in older && older.sources) u.searchParams.set("compareSources", older.sources);
+        else u.searchParams.delete("compareSources");
         history.replaceState(history.state, "", u.toString());
       }
       const home = !location.hash || location.hash === "#/" || !this.opts.routing;
-      this.setBundle(b, { old: a, diff, oldUrl });
+      this.setBundle(b, { old: a, diff, oldUrl, oldSources, oldSourcesUrl: "url" in older ? older.sources : undefined });
       if (home) this.goRoute({ view: "diff" });
     } catch (e) {
       this.showError(e as Error, () => this.showOpen());
@@ -490,10 +506,11 @@ export class App implements AppCtx {
     );
   }
 
-  setBundle(b: Bundle, cmp: { old: Bundle; diff: import("./diff").SchemaDiff; oldUrl?: string } | null = null): void {
+  setBundle(b: Bundle, cmp: { old: Bundle; diff: import("./diff").SchemaDiff; oldUrl?: string; oldSources?: SourceProvider; oldSourcesUrl?: string } | null = null): void {
     const t0 = performance.now();
     this.model = new Model(b);
     this._cmp = cmp ? new Compare(new Model(cmp.old), this.model, cmp.diff, cmp.oldUrl) : null;
+    if (cmp?.oldSources) this._cmp?.setOldSources(cmp.oldSources, cmp.oldSourcesUrl);
     if (this.opts.routing && !cmp) {
       const u = new URL(location.href);
       if (u.searchParams.has("compare")) {
@@ -542,6 +559,11 @@ export class App implements AppCtx {
       const banner = this._cmp ? diffBanner(this, this._cmp, r.id) : null;
       if (banner) page.insertBefore(banner, page.firstChild);
       if (this.opts.routing) document.title = `${this.model.label(r.id)} · ${title}`;
+    } else if (r.view === "old" && r.id !== undefined && this._cmp) {
+      const cmp = this._cmp;
+      page = componentPage(versionCtx(this, cmp, "old"), r.id);
+      page.insertBefore(oldVersionBanner(this, cmp, r.id, (cd) => diffLink(this, cd, "Compare the versions")), page.firstChild);
+      if (this.opts.routing) document.title = `${cmp.old.label(r.id)} (${cmp.oldTitle}) · ${title}`;
     } else if (r.view === "file" && r.id !== undefined) {
       page = filePage(this, r.id);
       if (this.opts.routing) document.title = `${this.model.b.files[r.id]?.name} · ${title}`;

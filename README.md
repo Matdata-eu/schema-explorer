@@ -68,7 +68,11 @@ own files on it.
   added, removed and changed type, element, attribute, cardinality and
   enumeration value, rated breaking or not, with likely renames and
   namespace changes detected; changes are highlighted in the diagrams and
-  trees, and exported as Markdown, HTML or JSON.
+  trees, and exported as Markdown, HTML or JSON. Each changed component can
+  also be seen **side by side**: both versions' own class diagrams (laid out
+  together, pan and zoom linked), their content trees lined up row by row,
+  and their XSD source with a line and word diff (or unified), plus the full
+  page of either version.
 - **Share links** that restore the page, the diagram's options, added boxes,
   open tree nodes and zoom; light and dark themes; a short manual (Help).
 
@@ -153,10 +157,15 @@ Several paths for one side are joined with commas. The JSON diff format is
 versioned (`format`, see `crates/core/src/diff.rs`). In the viewer, "Compare
 two versions" on the open page takes two schema sets; a link
 `?bundle=<new>&compare=<old>` opens the comparison directly. The overview
-lists the changes with filters, each changed component gets a page with
-both versions side by side, and diagrams and content trees of the later
-version mark what was added (+, green), removed (−, red, struck through)
-and changed (~, amber).
+lists the changes with filters. Each changed component gets a page with
+four views (kept in the link as `v=`): *Changes* marks what was added (+,
+green), removed (−, red, struck through) and changed (~, amber) on the
+later version's diagram; *Side by side* shows each version's own diagram or
+content tree next to the other, laid out so matching boxes and rows line
+up, and the component's XSD source of both versions with a line diff;
+*Old* and *New* show the full page of either version. Pass
+`&compareSources=<url>` when the earlier version's .xsd files are not next
+to its bundle.
 
 ## Layout
 

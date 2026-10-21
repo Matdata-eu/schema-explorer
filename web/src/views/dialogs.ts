@@ -100,6 +100,13 @@ export function openHelp(host: HTMLElement): void {
       [b("Overview map"), " on the start page draws the complex types of a namespace by derivation. Narrow it to a folder of files, allow more boxes, or add ", b("Containment"), " arrows. Big namespaces show the most connected types first."]
     ),
     section(
+      "Comparing versions",
+      false,
+      [b("Compare two versions"), " on the open page takes an earlier and a later schema set (or open ", code("?bundle=<new>&compare=<old>"), "). ", b("Changes"), " lists what was added (", code("+"), "), removed (", code("−"), ") and changed (", code("~"), "), with breaking changes flagged; filter it and export it as Markdown, HTML or JSON."],
+      ["A changed component's page has four views. ", b("Changes"), " lists the changes and marks them on the later version's diagram. ", b("Side by side"), " shows each version's own diagram or content tree, left old and right new, laid out so matching boxes and rows sit at the same place, and the XSD source of both with the changed lines and words highlighted (", b("Unified"), " puts them in one column). ", b("Old"), " and ", b("New"), " show the whole normal page of either version."],
+      ["Side by side, ", b("Linked"), " pans and zooms both sides together, double-clicking a box or opening a tree node does it on both sides, and each side has its own ", b("Export"), ". Links on the left lead to the earlier version's pages. Markers and struck-through text tell what differs without relying on colour."]
+    ),
+    section(
       "Sharing and display",
       false,
       [b("Share"), " copies a link to exactly this view: the schemas (when loaded from an address), the page, the tab, the diagram's options, the boxes you added, the open tree nodes and the zoom. The address bar always holds the same link."],
