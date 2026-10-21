@@ -3,7 +3,8 @@
 use schema_explorer_core::{Options, Source};
 use wasm_bindgen::prelude::*;
 
-/// Index an XSD set and return the bundle as JSON.
+/// Index a schema set (XSD, or JSON Schema / OpenAPI / AsyncAPI in JSON
+/// or YAML) and return the bundle as JSON.
 ///
 /// `names` and `contents` are parallel arrays: file paths (relative paths
 /// let imports and includes resolve; bare file names resolve by name) and
@@ -74,6 +75,14 @@ pub fn diff_report(diff: &str, format: &str) -> Result<String, JsValue> {
         "html" => Ok(schema_explorer_core::report::html(&d)),
         _ => Err(err(format!("unknown report format {format}"))),
     }
+}
+
+/// The schema at a JSON pointer of a JSON or YAML file, as indented JSON
+/// (the source view of a JSON Schema component).
+#[wasm_bindgen]
+pub fn json_source(name: &str, text: &str, pointer: &str) -> Result<String, JsValue> {
+    schema_explorer_core::json::source(name, text.as_bytes(), pointer)
+        .ok_or_else(|| err(format!("{pointer} not found in {name}")))
 }
 
 /// The version of the core library.
