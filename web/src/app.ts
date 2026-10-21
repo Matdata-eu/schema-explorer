@@ -47,6 +47,10 @@ interface Example {
   focus?: string;
   publisher?: string;
   licence?: string;
+  /** Version or revision of the schema set. */
+  version?: string;
+  /** The publisher's page for the schema set. */
+  link?: string;
 }
 
 export class App implements AppCtx {
@@ -673,18 +677,25 @@ export class App implements AppCtx {
           { class: "example-grid" },
           list.map((ex) =>
             h(
-              "button",
-              { type: "button", class: "example", onClick: () => {
-                // Links stay short and portable when the examples sit next to the app.
-                const here = new URL(".", document.baseURI).href;
-                const rel = (u: string) => (u.startsWith(here) ? u.slice(here.length) : u);
-                const src = rel(new URL(ex.src, base).href);
-                const sources = ex.sources ? rel(new URL(ex.sources, base).href) : undefined;
-                void this.openUrl(src, ex.focus, sources);
-              } },
-              h("strong", null, ex.title),
-              ex.description ? h("span", { class: "muted" }, ex.description) : null,
-              ex.publisher ? h("span", { class: "faint small" }, ex.publisher, ex.licence ? ` · ${ex.licence}` : "") : null
+              "div",
+              { class: "example-card" },
+              h(
+                "button",
+                { type: "button", class: "example", onClick: () => {
+                  // Links stay short and portable when the examples sit next to the app.
+                  const here = new URL(".", document.baseURI).href;
+                  const rel = (u: string) => (u.startsWith(here) ? u.slice(here.length) : u);
+                  const src = rel(new URL(ex.src, base).href);
+                  const sources = ex.sources ? rel(new URL(ex.sources, base).href) : undefined;
+                  void this.openUrl(src, ex.focus, sources);
+                } },
+                h("strong", null, ex.title, ex.version ? h("span", { class: "example-version" }, ex.version) : null),
+                ex.description ? h("span", { class: "muted" }, ex.description) : null,
+                ex.publisher ? h("span", { class: "faint small" }, ex.publisher, ex.licence ? ` · ${ex.licence}` : "") : null
+              ),
+              ex.link && /^https?:/.test(ex.link)
+                ? h("a", { class: "example-source small", href: ex.link, target: "_blank", rel: "noopener" }, "Source ↗")
+                : null
             )
           )
         )
