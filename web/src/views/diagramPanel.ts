@@ -5,7 +5,8 @@ import { Diagram, type NodeAction, type View } from "../diagram";
 import { button, copyText, h, icon } from "../dom";
 import { buildNeighborhood, defaultNeighborhood, toMermaid, toPlantUml, type GraphSpec, type NeighborhoodOptions } from "../graph";
 import type { Id } from "../model";
-import { TreeView, rootNode, type TNode } from "../tree";
+import { TreeView, rootNode, setTreeDiff, type TNode } from "../tree";
+import { annotateGraph } from "../diff";
 
 /** What a click on a box in a diagram offers. */
 export function boxActions(ctx: AppCtx, id: Id, expand?: { expanded: boolean; toggle: () => void }): NodeAction[] {
@@ -128,6 +129,7 @@ export function diagramPanel(ctx: AppCtx, focus: Id, opts: { tall?: boolean } = 
     if (!started) return;
     wrap.appendChild(overlay);
     graph = buildNeighborhood(m, o);
+    if (ctx.cmp) annotateGraph(graph, ctx.cmp);
     const start = restoreView ? view : undefined;
     restoreView = false;
     sync();
@@ -195,6 +197,7 @@ export function treePanel(ctx: AppCtx, focus: Id): HTMLElement {
   const wrap = h("div", { class: "diagram tall" });
   const statusText = h("span");
   const status = h("div", { class: "status" }, statusText, h("div", { class: "legend hide-mobile" }, h("span", { class: "dashed" }, "optional"), h("span", { class: "stacked" }, "repeated")));
+  setTreeDiff(ctx.cmp);
   const root = rootNode(m, focus);
   let started = false;
   const toggleNode = (n: TNode, isOpen: boolean) => {

@@ -1,5 +1,6 @@
 // Getting a bundle from somewhere: a bundle URL, dropped .xsd files and
 // folders (indexed in a WebAssembly worker), or the local `serve` server.
+import type { SchemaDiff } from "./diff";
 import type { Bundle } from "./model";
 
 export interface LoadProgress {
@@ -128,6 +129,17 @@ export async function indexFiles(files: NamedBytes[], progress?: (p: LoadProgres
   const contents = files.map((f) => f.bytes.slice());
   const json = await call({ op: "index", names: files.map((f) => f.name), contents }, contents.map((c) => c.buffer as ArrayBuffer));
   return checkBundle(JSON.parse(json));
+}
+
+/** Compare two bundles (WebAssembly, in a worker); `old` is the earlier version. */
+export async function diffBundles(old: Bundle, cur: Bundle, options: Record<string, boolean> = {}): Promise<SchemaDiff> {
+  const strip = (b: Bundle) => JSON.stringify({ ...b, search: {} });
+  return JSON.parse(await call({ op: "diff", old: strip(old), new: strip(cur), options: JSON.stringify(options) })) as SchemaDiff;
+}
+
+/** A Markdown or HTML report of a diff. */
+export function diffReport(d: SchemaDiff, format: "md" | "html"): Promise<string> {
+  return call({ op: "report", json: JSON.stringify(d), format });
 }
 
 /** Read dropped or picked files; directories are walked for .xsd files. */

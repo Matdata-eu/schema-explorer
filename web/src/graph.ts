@@ -15,6 +15,8 @@ export interface AttrLine {
   groupKey?: string;
   /** Component to open on click. */
   id?: Id;
+  /** Compare mode: how the line differs from the earlier version. */
+  diff?: "added" | "removed" | "changed";
 }
 
 export interface NodeSpec {
@@ -30,6 +32,7 @@ export interface NodeSpec {
   /** Lines not shown (collapsed). */
   hiddenAttrs: number;
   moreOf?: { from: string; relation: string; ids: Id[] };
+  diff?: "added" | "removed" | "changed";
 }
 
 export type EdgeKind = "gen" | "restr" | "comp" | "dep" | "incoming" | "typed";
@@ -43,6 +46,7 @@ export interface EdgeSpec {
   mult?: string;
   /** Component behind the edge, for navigation. */
   id?: Id;
+  diff?: "added" | "removed" | "changed";
 }
 
 export interface GraphSpec {

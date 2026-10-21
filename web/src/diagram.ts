@@ -255,7 +255,7 @@ export class Diagram {
     if (!sec) return null;
     const pts = [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint];
     const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-    const g = s("g", { class: `edge ${e.kind}`, "data-from": e.from, "data-to": e.to });
+    const g = s("g", { class: `edge ${e.kind}${e.diff ? ` d-${e.diff}` : ""}`, "data-from": e.from, "data-to": e.to });
     const path = s("path", { d });
     switch (e.kind) {
       case "gen":
@@ -306,7 +306,7 @@ export class Diagram {
   }
 
   private drawNode(n: NodeSpec, x: number, y: number, sz: Sized): SVGGElement {
-    const cls = ["node", n.kind, n.focus ? "focus" : "", n.external ? "external" : ""].filter(Boolean).join(" ");
+    const cls = ["node", n.kind, n.focus ? "focus" : "", n.external ? "external" : "", n.diff ? `d-${n.diff}` : ""].filter(Boolean).join(" ");
     const g = s("g", { class: cls, transform: `translate(${x} ${y})`, "data-key": n.key });
     g.appendChild(s("rect", { class: "box", width: sz.w, height: sz.h, rx: 10 }));
     const headH = HEAD_H + (n.stereotype ? STEREO_H : 0);
@@ -327,7 +327,7 @@ export class Diagram {
         if ("header" in r) {
           g.appendChild(s("text", { class: "attr", x: sz.w / 2, y: yy, "text-anchor": "middle", style: { fontStyle: "italic", fill: "var(--se-text-3)" } }, ellipsize(r.header, sz.w - PAD_X * 2)));
         } else {
-          const t = s("text", { class: `attr${r.inherited ? " inh" : ""}`, x: PAD_X, y: yy });
+          const t = s("text", { class: `attr${r.inherited ? " inh" : ""}${r.diff ? ` d-${r.diff}` : ""}`, x: PAD_X, y: yy });
           const full = attrText(r);
           if (measure(full) > sz.w - PAD_X * 2) {
             t.textContent = ellipsize(full, sz.w - PAD_X * 2);
@@ -654,6 +654,13 @@ line.sep{stroke:${v("--se-border")};stroke-width:1}
 marker path.tri{fill:${v("--se-panel")};stroke:${v("--se-text")};stroke-width:1.5}
 marker path.arrow,marker path.arrow-dep{fill:none;stroke:${v("--se-border-strong")};stroke-width:1.5}
 marker path.diamond{fill:${v("--se-text")};stroke:${v("--se-text")}}
+.node.d-added rect.box{stroke:${v("--se-add")};stroke-width:2.5}
+.node.d-changed rect.box{stroke:${v("--se-chg")};stroke-width:2.5}
+text.attr.d-added{fill:${v("--se-add")}}
+text.attr.d-removed{fill:${v("--se-del")};text-decoration:line-through}
+text.attr.d-changed{fill:${v("--se-chg")}}
+.edge.d-added path{stroke:${v("--se-add")};stroke-width:2}
+.edge.d-changed path{stroke:${v("--se-chg")};stroke-width:2}
 ${this.extraCss()}`;
   }
 

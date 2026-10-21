@@ -1,12 +1,14 @@
 // The application: state, routing, the shell around the views.
 import type { AppCtx, Prefs, Route } from "./ctx";
-import { button, copyText, h, icon, type Child } from "./dom";
-import { fetchBundleFromServer, indexFiles, loadUrl, memorySources, readDataTransfer, readFiles, serverSources, serverStatus, urlSources, type LoadProgress, type NamedBytes, type ServerStatus, type SourceProvider } from "./loader";
+import { button, copyText, h, icon, plural, type Child } from "./dom";
+import { Compare } from "./diff";
+import { diffBundles, fetchBundleFromServer, indexFiles, loadUrl, memorySources, readDataTransfer, readFiles, serverSources, serverStatus, urlSources, type LoadProgress, type NamedBytes, type ServerStatus, type SourceProvider } from "./loader";
 import { KIND_SLUG, Model, type Bundle, type Id } from "./model";
 import { matdataMark } from "./logo";
 import { openAbout, openHelp } from "./views/dialogs";
 import { homePage } from "./views/home";
 import { overviewPage } from "./views/overview";
+import { diffBanner, diffComponentPage, diffOverviewPage } from "./views/compare";
 import { componentPage, filePage } from "./views/pages";
 import { sidebar, type Sidebar } from "./views/sidebar";
 
@@ -23,6 +25,9 @@ export interface AppOptions {
   /** Hide the sidebar and top bar; show only the page. */
   minimal?: boolean;
 }
+
+/** One side of a comparison: an address, or files read from the computer. */
+export type CompareSide = { url: string; sources?: string } | { files: NamedBytes[] };
 
 const DEFAULT_PREFS: Prefs = {
   theme: "auto",
@@ -61,6 +66,7 @@ export class App implements AppCtx {
   private source: { kind: "url"; url: string; sources?: string } | { kind: "files" } | { kind: "server" } | null = null;
   private sources: SourceProvider | null = null;
   private sourceCache = new Map<number, Promise<string | null>>();
+  private _cmp: Compare | null = null;
   private onHash = () => this.readHash();
 
   constructor(root: HTMLElement, opts: AppOptions) {
@@ -101,6 +107,9 @@ export class App implements AppCtx {
   }
   get embed(): boolean {
     return this.opts.embed;
+  }
+  get cmp(): Compare | null {
+    return this._cmp;
   }
   get bundle(): Bundle | null {
     return this.model?.b ?? null;
@@ -158,7 +167,10 @@ export class App implements AppCtx {
       u.searchParams.delete("bundle");
       u.searchParams.delete("sources");
     }
-    return { url: u.toString(), complete: this.source?.kind !== "files" };
+    if (this._cmp?.oldUrl) u.searchParams.set("compare", this._cmp.oldUrl);
+    else u.searchParams.delete("compare");
+    const complete = this.source?.kind !== "files" && (!this._cmp || !!this._cmp.oldUrl);
+    return { url: u.toString(), complete };
   }
 
   private async share(): Promise<void> {
@@ -205,6 +217,10 @@ export class App implements AppCtx {
       const c = this.model.comp(r.id);
       path = c.parent === undefined && c.name ? `#/${KIND_SLUG[c.kind]}/${encodeURIComponent(this.model.qname(r.id))}` : `#/id/${r.id}`;
     } else if (r.view === "file" && r.id !== undefined) path = `#/file/${r.id}`;
+    else if (r.view === "diffc" && r.query) {
+      const i = r.query.indexOf("/");
+      path = `#/diff/${r.query.slice(0, i)}/${encodeURIComponent(r.query.slice(i + 1))}`;
+    }
     else if (r.view !== "home") path = "#/" + r.view;
     return path + (qs ? "?" + qs : "");
   }
@@ -221,6 +237,10 @@ export class App implements AppCtx {
     const m = this.model;
     if (!m) return { view: "home", params };
     if (parts[0] === "overview") return { view: "overview", params };
+    if (parts[0] === "diff") {
+      if (parts.length >= 3) return { view: "diffc", query: `${parts[1]}/${decodeURIComponent(parts.slice(2).join("/"))}`, params };
+      return { view: "diff", params };
+    }
     if (parts[0] === "file" && parts[1] !== undefined) {
       const n = Number(parts[1]);
       if (Number.isInteger(n) && m.b.files[n]) return { view: "file", id: n, params };
@@ -264,8 +284,12 @@ export class App implements AppCtx {
   }
 
   // ---- loading ------------------------------------------------------------
-  async start(src?: string | null, focus?: string | null, sources?: string | null): Promise<void> {
+  async start(src?: string | null, focus?: string | null, sources?: string | null, compare?: string | null): Promise<void> {
     this.server = await serverStatus();
+    if (src && compare) {
+      await this.openCompare({ url: compare }, { url: src, sources: sources ?? undefined });
+      return;
+    }
     if (src) {
       await this.openUrl(src, focus ?? undefined, sources ?? undefined);
       return;
@@ -348,9 +372,135 @@ export class App implements AppCtx {
     }
   }
 
-  setBundle(b: Bundle): void {
+  /** Read picked or dropped files into a bundle: one bundle file, or .xsd files indexed here. */
+  private async bundleFromFiles(named: NamedBytes[]): Promise<Bundle> {
+    if (named.length === 1 && /\.json$/i.test(named[0].name)) {
+      const b = JSON.parse(new TextDecoder().decode(named[0].bytes)) as Bundle;
+      if (!b || !Array.isArray(b.components)) throw new Error("this JSON file is not a schema-explorer bundle");
+      return b;
+    }
+    const xsd = named.filter((f) => /\.xsd$/i.test(f.name));
+    if (xsd.length === 0) throw new Error("no .xsd files among the files");
+    const b = await indexFiles(xsd, (p) => this.showProgress(p));
+    const top = new Set(xsd.map((f) => (f.name.includes("/") ? f.name.split("/")[0] : "")));
+    if (top.size === 1 && !top.has("")) b.title = [...top][0];
+    return b;
+  }
+
+  /** Compare two versions: the later one is explored, with what changed since the earlier one highlighted. */
+  async openCompare(older: CompareSide, newer: CompareSide): Promise<void> {
+    try {
+      const load = async (side: CompareSide, which: string): Promise<Bundle> => {
+        if ("url" in side) {
+          this.showProgress({ stage: "download", detail: `${which}: ${side.url}` });
+          return loadUrl(side.url, (p) => this.showProgress(p));
+        }
+        this.showProgress({ stage: "index", detail: which });
+        return this.bundleFromFiles(side.files);
+      };
+      const a = await load(older, "the earlier version");
+      const b = await load(newer, "the later version");
+      this.showProgress({ stage: "index", detail: "comparing the versions" });
+      const started = performance.now();
+      const diff = await diffBundles(a, b);
+      console.info(`compared in ${Math.round(performance.now() - started)} ms: ${diff.components.length} differences`);
+      if ("url" in newer) {
+        this.source = { kind: "url", url: newer.url, sources: newer.sources };
+        const abs = new URL(newer.url, document.baseURI).href;
+        this.sources = urlSources(newer.sources ? new URL(newer.sources, document.baseURI).href : abs);
+      } else {
+        this.source = { kind: "files" };
+        this.sources = memorySources(newer.files.filter((f) => /\.xsd$/i.test(f.name)));
+      }
+      const oldUrl = "url" in older ? older.url : undefined;
+      if (this.opts.routing) {
+        const u = new URL(location.href);
+        u.searchParams.delete("src");
+        if ("url" in newer) u.searchParams.set("bundle", newer.url);
+        else u.searchParams.delete("bundle");
+        if (oldUrl && "url" in newer) u.searchParams.set("compare", oldUrl);
+        else u.searchParams.delete("compare");
+        history.replaceState(history.state, "", u.toString());
+      }
+      const home = !location.hash || location.hash === "#/" || !this.opts.routing;
+      this.setBundle(b, { old: a, diff, oldUrl });
+      if (home) this.goRoute({ view: "diff" });
+    } catch (e) {
+      this.showError(e as Error, () => this.showOpen());
+      this.opts.onError?.(e as Error);
+    }
+  }
+
+  /** The card of the open page that loads two versions to compare. */
+  private compareCard(): HTMLElement {
+    const sides: (CompareSide | null)[] = [null, null];
+    const go = h("button", { type: "button", class: "btn primary", disabled: true, onClick: () => {
+      if (sides[0] && sides[1]) void this.openCompare(sides[0], sides[1]);
+    } }, "Compare") as HTMLButtonElement;
+    const zone = (i: number, title: string) => {
+      const status = h("span", { class: "muted small" }, "nothing yet");
+      const set = (side: CompareSide | null, label: string) => {
+        sides[i] = side;
+        status.textContent = label;
+        z.classList.toggle("set", !!side);
+        go.disabled = !(sides[0] && sides[1]);
+      };
+      const pick = (files: FileList | null) => {
+        if (files?.length) void readFiles(files).then((f) => set(f.length ? { files: f } : null, f.length ? plural(f.length, "file") : "no .xsd files"));
+      };
+      const fileInput = h("input", { type: "file", multiple: true, accept: ".xsd,.json", hidden: true, onChange: (ev: Event) => pick((ev.target as HTMLInputElement).files) }) as HTMLInputElement;
+      const dirInput = h("input", { type: "file", multiple: true, hidden: true, webkitdirectory: true, onChange: (ev: Event) => pick((ev.target as HTMLInputElement).files) }) as HTMLInputElement;
+      const url = h("input", { class: "input", type: "url", placeholder: "or the address of a bundle", "aria-label": `${title}: address of a bundle or an XSD file`, onInput: (ev: Event) => {
+        const v = (ev.target as HTMLInputElement).value.trim();
+        set(v ? { url: v } : null, v ? "from the web" : "nothing yet");
+      } }) as HTMLInputElement;
+      const z = h(
+        "div",
+        { class: "dropzone compare-zone" },
+        h("p", null, h("strong", null, title)),
+        h("p", { class: "small" }, "Drop files or a folder, ", h("button", { type: "button", class: "linkish", onClick: () => fileInput.click() }, "choose files"), " · ", h("button", { type: "button", class: "linkish", onClick: () => dirInput.click() }, "a folder")),
+        url,
+        status,
+        fileInput,
+        dirInput
+      );
+      z.addEventListener("dragover", (ev) => {
+        ev.preventDefault();
+        z.classList.add("over");
+      });
+      z.addEventListener("dragleave", () => z.classList.remove("over"));
+      z.addEventListener("drop", (ev) => {
+        if (!ev.dataTransfer?.files.length) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        z.classList.remove("over");
+        status.textContent = "reading…";
+        void readDataTransfer(ev.dataTransfer).then((f) => set(f.length ? { files: f } : null, f.length ? plural(f.length, "file") : "no .xsd files"));
+      });
+      return z;
+    };
+    return h(
+      "section",
+      { class: "card open-card compare-card" },
+      h("h2", null, "Compare two versions"),
+      h("p", { class: "muted" }, "What was added, removed or changed between two versions of a schema set, with breaking changes flagged. Matching follows a namespace that changed between the versions."),
+      h("div", { class: "compare-zones" }, zone(0, "Earlier version"), zone(1, "Later version")),
+      h("p", null, go),
+      h("p", { class: "muted small" }, "Links: ", h("code", null, "?bundle="), "later version", h("code", null, "&compare="), "earlier version.")
+    );
+  }
+
+  setBundle(b: Bundle, cmp: { old: Bundle; diff: import("./diff").SchemaDiff; oldUrl?: string } | null = null): void {
     const t0 = performance.now();
     this.model = new Model(b);
+    this._cmp = cmp ? new Compare(new Model(cmp.old), this.model, cmp.diff, cmp.oldUrl) : null;
+    if (this.opts.routing && !cmp) {
+      const u = new URL(location.href);
+      if (u.searchParams.has("compare")) {
+        u.searchParams.delete("compare");
+        history.replaceState(history.state, "", u.toString());
+      }
+    }
     this.sourceCache.clear();
     this.rebuildSidebar();
     this.renderTopbar();
@@ -389,10 +539,20 @@ export class App implements AppCtx {
     const title = this.model.title;
     if (r.view === "comp" && r.id !== undefined) {
       page = componentPage(this, r.id);
+      const banner = this._cmp ? diffBanner(this, this._cmp, r.id) : null;
+      if (banner) page.insertBefore(banner, page.firstChild);
       if (this.opts.routing) document.title = `${this.model.label(r.id)} · ${title}`;
     } else if (r.view === "file" && r.id !== undefined) {
       page = filePage(this, r.id);
       if (this.opts.routing) document.title = `${this.model.b.files[r.id]?.name} · ${title}`;
+    } else if (r.view === "diff" && this._cmp) {
+      page = diffOverviewPage(this, this._cmp);
+      if (this.opts.routing) document.title = `Changes · ${title}`;
+    } else if (r.view === "diffc" && this._cmp && r.query) {
+      const i = r.query.indexOf("/");
+      const cd = this._cmp.find(r.query.slice(0, i), r.query.slice(i + 1));
+      page = cd ? diffComponentPage(this, this._cmp, cd) : h("div", null, h("h1", null, "Not changed"), h("p", null, h("code", null, r.query), " did not change between the versions."), button("All changes", () => this.goRoute({ view: "diff" })));
+      if (this.opts.routing) document.title = `${r.query.slice(i + 1)} (changes) · ${title}`;
     } else if (r.view === "overview") {
       page = overviewPage(this);
       if (this.opts.routing) document.title = `Overview · ${title}`;
@@ -423,6 +583,7 @@ export class App implements AppCtx {
       else this.showOpen();
     } }, matdataMark(), h("span", { class: "title-text" }, m?.title ?? "schema-explorer"), m ? h("small", { class: "hide-mobile" }, `${(m.b.stats.global.complexType ?? 0).toLocaleString()} complex types`) : null));
     t.appendChild(h("span", { class: "spacer" }));
+    if (m && this._cmp) t.appendChild(button("Changes", () => this.goRoute({ view: "diff" }), { icon: "table", cls: "small", title: `What changed since ${this._cmp.oldTitle}` }));
     if (m) t.appendChild(button("Map", () => this.goRoute({ view: "overview" }), { icon: "map", cls: "small hide-mobile", title: "Overview map of the complex types" }));
     if (m) t.appendChild(button("Share", () => void this.share(), { icon: "share", cls: "small share-btn", title: "Copy a link to exactly this view" }));
     if (m) t.appendChild(button("Open…", () => this.showOpen(), { icon: "folder", cls: "small hide-mobile", title: "Load other schemas" }));
@@ -489,6 +650,7 @@ export class App implements AppCtx {
         h("section", { class: "card open-card" }, h("h2", null, "From your computer"), drop),
         h("section", { class: "card open-card" }, h("h2", null, "From the web"), h("p", { class: "muted" }, "The address of a bundle made with ", h("code", null, "schema-explorer index"), ", or of a single .xsd file."), form, h("p", { class: "muted small" }, "Add ", h("code", null, "?bundle="), " and the address to this page's link to open it straight away. The site must allow cross-origin requests."))
       ),
+      this.compareCard(),
       examples
     );
     this.setMain(page, this.footer());
