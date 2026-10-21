@@ -1,8 +1,9 @@
 // What every view gets: the model, navigation, and small shared UI pieces.
+import type { Compare } from "./diff";
 import type { Id, Model } from "./model";
 
 export interface Route {
-  /** "home" | "comp" | "file" | "overview" | "missing" */
+  /** "home" | "comp" | "file" | "overview" | "missing" | "diff" | "diffc" (query: `slug/qname`) */
   view: string;
   id?: Id;
   /** Sub view of a page: "diagram" | "tree" */
@@ -26,6 +27,8 @@ export interface AppCtx {
   readonly route: Route;
   readonly prefs: Prefs;
   readonly embed: boolean;
+  /** Compare mode: the earlier version and the diff to it (the model is the later version). */
+  readonly cmp: Compare | null;
   go(id: Id, extra?: Partial<Route>): void;
   goRoute(r: Partial<Route>): void;
   href(id: Id, extra?: Partial<Route>): string;
