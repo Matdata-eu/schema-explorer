@@ -1,4 +1,4 @@
-//! The bundle: one XSD set read into components with small integer ids, plus
+//! The bundle: one XSD or JSON Schema set read into components with small integer ids, plus
 //! the indexes the viewer needs ("where used", derived types, substitution
 //! group members, effective content models, search), as serde JSON.
 
@@ -20,6 +20,9 @@ pub type NsId = u32;
 pub struct Bundle {
     pub format: u32,
     pub generator: String,
+    /// The schema language the set was read from.
+    #[serde(default, skip_serializing_if = "Language::is_xsd")]
+    pub language: Language,
     /// True when the bundle was written in the compact form: no
     /// `effective` content models and no `search` index (the viewer
     /// recomputes them).
@@ -36,6 +39,25 @@ pub struct Bundle {
     /// documentation and enumeration values) to the components they occur in.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub search: BTreeMap<String, Vec<Id>>,
+}
+
+/// The schema language of a bundle.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Language {
+    /// XML Schema (XSD).
+    #[default]
+    Xsd,
+    /// JSON Schema, including the schemas of OpenAPI and AsyncAPI documents.
+    /// Named schemas are complex or simple types, properties are local
+    /// elements; [`Component::json`] says what they are in JSON terms.
+    JsonSchema,
+}
+
+impl Language {
+    pub fn is_xsd(&self) -> bool {
+        *self == Language::Xsd
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +77,10 @@ pub struct FileInfo {
     pub prefixes: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// The schema language and version of a JSON file: `JSON Schema
+    /// 2020-12`, `OpenAPI 3.1.0`, `AsyncAPI 3.0.0`, ...
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dialect: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub element_form_qualified: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -195,6 +221,39 @@ pub struct Component {
     /// A built-in type or attribute (no source file).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub builtin: bool,
+    /// JSON Schema details, for a bundle read from JSON Schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json: Option<Box<JsonInfo>>,
+}
+
+/// What a component is in JSON Schema terms.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonInfo {
+    /// For a type: the JSON value it describes (`object`, `array`,
+    /// `string`, `number`, `integer`, `boolean`, `null`, `any`) or how it
+    /// combines schemas (`oneOf`, `anyOf`, `union`). For a local element:
+    /// its role (`property`, `patternProperty`, `additionalProperties`,
+    /// `items`, `option`).
+    pub kind: String,
+    /// JSON pointer of the schema in its file.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pointer: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// `examples` and `example`, as JSON text.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub deprecated: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub write_only: bool,
+    /// A property whose value is an array: the element has the item type,
+    /// and its cardinality comes from `minItems`/`maxItems`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub array: bool,
 }
 
 impl Component {
@@ -218,6 +277,7 @@ impl Component {
             attribute_group: None,
             identity: None,
             builtin: false,
+            json: None,
         }
     }
     pub fn is_global(&self) -> bool {

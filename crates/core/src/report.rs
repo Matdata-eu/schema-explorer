@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use crate::bundle::Kind;
+use crate::bundle::{Kind, Language};
 use crate::diff::{
-    ChangeKind, ComponentDiff, Counts, Impact, SchemaDiff, Status, change_label, kind_name,
+    ChangeKind, ComponentDiff, Counts, Impact, SchemaDiff, Status, change_label, kind_name_in,
 };
 
 /// Inline text: `code` and **bold** spans are rendered by each backend.
@@ -39,7 +39,15 @@ pub fn marker(k: ChangeKind) -> &'static str {
     }
 }
 
-fn plural(k: Kind) -> &'static str {
+fn plural(lang: Language, k: Kind) -> &'static str {
+    if lang == Language::JsonSchema {
+        match k {
+            Kind::ComplexType => return "Objects",
+            Kind::SimpleType => return "Scalars",
+            Kind::Element => return "Properties",
+            _ => {}
+        }
+    }
     match k {
         Kind::ComplexType => "Complex types",
         Kind::SimpleType => "Simple types",
@@ -96,8 +104,8 @@ fn change_line(c: &crate::diff::Change) -> String {
     s
 }
 
-fn heading(d: &ComponentDiff) -> String {
-    let mut s = format!("{} {}", kind_name(d.kind), code(d.qname()));
+fn heading(lang: Language, d: &ComponentDiff) -> String {
+    let mut s = format!("{} {}", kind_name_in(lang, d.kind), code(d.qname()));
     if let Some(o) = &d.old
         && d.new.is_some()
         && o.qname != d.qname()
@@ -168,7 +176,7 @@ fn blocks(d: &SchemaDiff) -> Vec<Block> {
         .summary
         .by_kind
         .iter()
-        .map(|(k, c)| counts_row(plural(*k).into(), c))
+        .map(|(k, c)| counts_row(plural(d.language, *k).into(), c))
         .collect();
     rows.push(counts_row("**Total**".into(), t));
     out.push(Block::Table(head(), rows));
@@ -237,14 +245,14 @@ fn blocks(d: &SchemaDiff) -> Vec<Block> {
         for (k, list) in &removed {
             out.push(Block::P(format!(
                 "**{}** ({}): {}",
-                plural(*k),
+                plural(d.language, *k),
                 list.len(),
                 list.join(", ")
             )));
         }
     }
     for c in &breaking {
-        out.push(Block::H(3, heading(c)));
+        out.push(Block::H(3, heading(d.language, c)));
         out.push(Block::List(
             c.changes
                 .iter()
@@ -268,7 +276,7 @@ fn blocks(d: &SchemaDiff) -> Vec<Block> {
     for (k, list) in &added {
         out.push(Block::P(format!(
             "**{}** ({}): {}",
-            plural(*k),
+            plural(d.language, *k),
             list.len(),
             list.join(", ")
         )));
@@ -289,7 +297,7 @@ fn blocks(d: &SchemaDiff) -> Vec<Block> {
                 .iter()
                 .map(|r| {
                     vec![
-                        kind_name(r.kind).into(),
+                        kind_name_in(d.language, r.kind).into(),
                         code(&r.old.qname),
                         code(&r.new.qname),
                         format!("{}%", r.score),
@@ -305,7 +313,7 @@ fn blocks(d: &SchemaDiff) -> Vec<Block> {
         .collect();
     out.push(Block::H(2, format!("Other changes ({})", other.len())));
     for c in &other {
-        out.push(Block::H(3, heading(c)));
+        out.push(Block::H(3, heading(d.language, c)));
         out.push(Block::List(
             c.changes
                 .iter()

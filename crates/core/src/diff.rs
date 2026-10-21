@@ -287,6 +287,9 @@ pub struct SetInfo {
 pub struct SchemaDiff {
     pub format: u32,
     pub generator: String,
+    /// The schema language of the new version.
+    #[serde(default, skip_serializing_if = "Language::is_xsd")]
+    pub language: Language,
     pub options: DiffOptions,
     pub old: SetInfo,
     pub new: SetInfo,
@@ -465,6 +468,7 @@ pub fn diff(old: &Bundle, new: &Bundle, opts: &DiffOptions) -> SchemaDiff {
         .collect();
     SchemaDiff {
         format: DIFF_FORMAT,
+        language: new.language,
         generator: format!("schema-explorer-core {}", crate::version()),
         options: opts.clone(),
         old: set_info(old, ga.len()),
@@ -1216,7 +1220,12 @@ impl<'a> Cx<'a> {
                 (Some(a), None) => self.push(
                     out,
                     ChangeKind::FacetRemoved,
-                    Impact::NonBreaking,
+                    // JSON Schema `nullable`: no longer allowing null is breaking.
+                    if k == "nullable" {
+                        Impact::Breaking
+                    } else {
+                        Impact::NonBreaking
+                    },
                     path,
                     k,
                     Some(a.join(" | ")),
@@ -1225,7 +1234,11 @@ impl<'a> Cx<'a> {
                 (None, Some(b)) => self.push(
                     out,
                     ChangeKind::FacetAdded,
-                    Impact::Breaking,
+                    if k == "nullable" {
+                        Impact::NonBreaking
+                    } else {
+                        Impact::Breaking
+                    },
                     path,
                     k,
                     None,
@@ -2132,6 +2145,9 @@ fn facet_impact(kind: &str, a: &[String], b: &[String]) -> Impact {
     let tighter = match kind {
         "minLength" | "minInclusive" | "minExclusive" => y > x,
         "maxLength" | "maxInclusive" | "maxExclusive" | "totalDigits" | "fractionDigits" => y < x,
+        // JSON Schema.
+        "minimum" | "exclusiveMinimum" | "minItems" | "minProperties" | "minContains" => y > x,
+        "maximum" | "exclusiveMaximum" | "maxItems" | "maxProperties" | "maxContains" => y < x,
         _ => true,
     };
     if tighter {
@@ -2183,6 +2199,17 @@ pub fn kind_name(k: Kind) -> &'static str {
         Kind::Key => "key",
         Kind::Keyref => "keyref",
         Kind::Unique => "unique",
+    }
+}
+
+/// The name of a kind in the terms of a schema language: `complexType`
+/// in XSD, `object` in JSON Schema, ...
+pub fn kind_name_in(lang: Language, k: Kind) -> &'static str {
+    match (lang, k) {
+        (Language::JsonSchema, Kind::Element) => "property",
+        (Language::JsonSchema, Kind::ComplexType) => "object",
+        (Language::JsonSchema, Kind::SimpleType) => "scalar",
+        _ => kind_name(k),
     }
 }
 
