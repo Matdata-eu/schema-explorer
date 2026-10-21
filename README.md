@@ -1,14 +1,22 @@
 # schema-explorer
 
-A visual explorer for XML Schema (XSD), and later JSON Schema, that runs in the
-browser and can be published as a static site (GitHub Pages). It is the
-schema counterpart of [ontology-explorer](https://github.com/Matdata-eu/ontology-explorer).
+XML Schema (XSD) as UML-like diagrams, readable type pages and version diffs.
 
-**Status: early development.** The viewer works on real schema sets (NeTEx,
-railML); expect changes.
+Large schema sets such as NeTEx or railML are hard to read as hundreds of
+`.xsd` files. schema-explorer reads a whole set, follows its imports and
+includes, and shows it the way people are used to: class diagrams, content
+trees, and one page per type and element with every child, attribute,
+cardinality and allowed value. It also compares two versions of a set and
+says what changed and what breaks. It is the schema counterpart of
+[ontology-explorer](https://github.com/Matdata-eu/ontology-explorer).
 
-Website, with NeTEx, ERA TAF/TAP TSI, OASIS UBL and the W3C schema for
-schemas as examples: <https://matdata-eu.github.io/schema-explorer/>
+It runs entirely in the browser, so it can be published on GitHub Pages, and
+a small command-line tool pre-indexes large sets, serves the viewer locally
+and writes diff reports. JSON Schema support is planned.
+
+**Try it:** <https://matdata-eu.github.io/schema-explorer/> with NeTEx,
+ERA TAF and TAP TSI, OASIS UBL 2.4 and the W3C schema for schemas, or drop
+your own files on it.
 
 ![The page of a NeTEx complex type: derivation chain and class diagram](docs/screenshot-type.png)
 
@@ -40,6 +48,11 @@ schemas as examples: <https://matdata-eu.github.io/schema-explorer/>
   SVG, PNG, PlantUML and Mermaid.
 - **Content-model trees** in the style of XML editors, expanded on demand.
 - **Overview map** of the complex types of a namespace or a folder of files.
+- **Version comparison**: load two versions of a schema set and see every
+  added, removed and changed type, element, attribute, cardinality and
+  enumeration value, rated breaking or not, with likely renames and
+  namespace changes detected; changes are highlighted in the diagrams and
+  trees, and exported as Markdown, HTML or JSON.
 - **Share links** that restore the page, the diagram's options, added boxes,
   open tree nodes and zoom; light and dark themes; a short manual (Help).
 
@@ -58,8 +71,10 @@ schema-explorer serve main.xsd --bind 0.0.0.0:8080 --no-open
 their source for the XSD view. Without files, the viewer opens empty and
 indexes what you drop on it.
 
-Planned: comparing two versions of a schema set, JSON Schema, a Docker image
-and the `<schema-explorer>` web component on npm (`@matdata/schema-explorer`).
+Binaries for Linux, macOS and Windows, `cargo install schema-explorer`, the
+Docker image `ghcr.io/matdata-eu/schema-explorer` and the `<schema-explorer>`
+web component on npm (`@matdata/schema-explorer`) come with the first tagged
+release. Until then, build from source with `cargo build --release -p schema-explorer`.
 
 ## Indexing a schema set
 
