@@ -21,6 +21,12 @@
   --se-danger-bg: #fbe4e1;
   --se-warn: #6e4d00;
   --se-ok: #0563bb;
+  --se-add: #13773a;
+  --se-add-bg: #ddf3e4;
+  --se-del: #b42318;
+  --se-del-bg: #fbe4e1;
+  --se-chg: #8a5a00;
+  --se-chg-bg: #fbefc7;
   --se-class: #0563bb;
   --se-class-bg: #e3eefa;
   --se-prop: #1c2633;
@@ -76,6 +82,12 @@
   --se-danger-bg: #3d1512;
   --se-warn: #f5c242;
   --se-ok: #5aa8f2;
+  --se-add: #5fd38a;
+  --se-add-bg: #0f2e1b;
+  --se-del: #ff8f80;
+  --se-del-bg: #3d1512;
+  --se-chg: #f5c242;
+  --se-chg-bg: #3a2f0c;
   --se-class: #5aa8f2;
   --se-class-bg: #0e2a48;
   --se-prop: #eef1ef;
@@ -2008,4 +2020,256 @@ pre.xml .t-str {
 }
 .cm-tree .tn .expander:hover circle {
   fill: var(--se-accent-bg);
+}
+
+/* ---- compare mode ---------------------------------------------------- */
+.dmark {
+  display: inline-block;
+  min-width: 1.2em;
+  font-family: var(--se-mono);
+  font-weight: 700;
+  text-align: center;
+}
+.dmark.d-added,
+.d-added-text {
+  color: var(--se-add);
+}
+.dmark.d-removed,
+.d-removed-text {
+  color: var(--se-del);
+}
+.dmark.d-changed,
+.d-changed-text {
+  color: var(--se-chg);
+}
+a.d-removed-text,
+h1.d-removed-text {
+  text-decoration: line-through;
+}
+.badge.d-badge.d-added {
+  background: var(--se-add-bg);
+  color: var(--se-add);
+}
+.badge.d-badge.d-removed {
+  background: var(--se-del-bg);
+  color: var(--se-del);
+}
+.badge.d-badge.d-changed {
+  background: var(--se-chg-bg);
+  color: var(--se-chg);
+}
+.diff-page .stat .n,
+.diff-page .stat .l {
+  display: block;
+}
+.diff-page .page-head {
+  display: block;
+}
+.diff-page .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.diff-sum > div {
+  overflow-x: auto;
+  min-width: 0;
+}
+.stat-breaking .n {
+  color: var(--se-del);
+}
+.note-card {
+  margin: 12px 0;
+  padding: 12px 16px;
+  overflow-wrap: anywhere;
+}
+.diff-sum {
+  align-items: start;
+}
+.ptable.counts td.num,
+.ptable.counts th.num {
+  text-align: right;
+  white-space: nowrap;
+}
+.by-file {
+  margin-top: 12px;
+  padding: 12px 16px;
+}
+.by-file summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.filters .input {
+  width: auto;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.diff-list,
+.sbs > .side {
+  overflow-x: auto;
+}
+.ptable tr.d-row.d-added td {
+  background: var(--se-add-bg);
+}
+.ptable tr.d-row.d-removed td {
+  background: var(--se-del-bg);
+}
+.ptable tr.d-row.d-changed td {
+  background: var(--se-chg-bg);
+}
+.side-table tr.d-removed td.pre,
+.diff-table tr.d-removed td a {
+  text-decoration: line-through;
+}
+.diff-table td,
+.change-table td {
+  vertical-align: top;
+}
+.ptable td.mk {
+  width: 1.6em;
+  padding-right: 0;
+}
+.ptable td.pre {
+  white-space: pre;
+}
+.sbs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.side-head {
+  font-weight: 600;
+  padding: 4px 0 6px;
+  color: var(--se-text-2);
+}
+.sbs > .side.d-added .doc-text {
+  border-left: 3px solid var(--se-add);
+}
+.sbs > .side.d-removed .doc-text {
+  border-left: 3px solid var(--se-del);
+}
+.doc-text {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--se-panel);
+  border-radius: var(--se-radius-sm);
+  white-space: pre-wrap;
+}
+.doc-sub {
+  font-size: 14px;
+  margin: 12px 0 4px;
+}
+.diff-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--se-radius);
+  background: var(--se-panel);
+  border-left: 4px solid var(--se-border-strong);
+}
+.diff-banner.d-added {
+  border-left-color: var(--se-add);
+}
+.diff-banner.d-changed {
+  border-left-color: var(--se-chg);
+}
+.diff-banner .legend-diff {
+  margin-left: auto;
+}
+.compare-card {
+  margin-top: 16px;
+}
+.compare-zones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.dropzone.compare-zone {
+  min-height: 120px;
+  cursor: default;
+}
+.dropzone.compare-zone.set {
+  border-style: solid;
+  border-color: var(--se-add);
+}
+.compare-zone .input {
+  width: 100%;
+}
+.uml .node.d-added rect.box {
+  stroke: var(--se-add);
+  stroke-width: 2.5;
+}
+.uml .node.d-changed rect.box {
+  stroke: var(--se-chg);
+  stroke-width: 2.5;
+}
+.uml text.attr.d-added {
+  fill: var(--se-add);
+}
+.uml text.attr.d-changed {
+  fill: var(--se-chg);
+}
+.uml text.attr.d-removed {
+  fill: var(--se-del);
+  text-decoration: line-through;
+}
+.uml .edge.d-added path {
+  stroke: var(--se-add);
+  stroke-width: 2;
+}
+.uml .edge.d-changed path {
+  stroke: var(--se-chg);
+  stroke-width: 2;
+}
+.uml .edge.d-added text {
+  fill: var(--se-add);
+}
+.uml .edge.d-changed text {
+  fill: var(--se-chg);
+}
+.cm-tree .tn.d-added rect.box {
+  stroke: var(--se-add);
+  stroke-width: 2.2;
+  fill: var(--se-add-bg);
+}
+.cm-tree .tn.d-changed rect.box {
+  stroke: var(--se-chg);
+  stroke-width: 2.2;
+  fill: var(--se-chg-bg);
+}
+.cm-tree .tn.d-removed rect.box {
+  stroke: var(--se-del);
+  stroke-dasharray: 4 3;
+  fill: var(--se-del-bg);
+}
+.cm-tree .tn.d-removed text.tname {
+  fill: var(--se-del);
+  text-decoration: line-through;
+}
+.cm-tree .tn text.attr-line.d-added {
+  fill: var(--se-add);
+}
+.cm-tree .tn text.attr-line.d-changed {
+  fill: var(--se-chg);
+}
+.cm-tree .tn text.attr-line.d-removed {
+  fill: var(--se-del);
+  text-decoration: line-through;
+}
+@media (max-width: 860px) {
+  .sbs {
+    grid-template-columns: 1fr;
+  }
+  .diff-banner .legend-diff {
+    margin-left: 0;
+  }
 }
