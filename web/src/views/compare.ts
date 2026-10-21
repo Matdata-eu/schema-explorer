@@ -6,6 +6,9 @@ import { MARKER, STATUS_LABEL, changeLabel, changeMark, type Change, type Compar
 import { diffReport } from "../loader";
 import { KIND_LABEL, KIND_SLUG, docsText, isId, occursText, type Id, type Kind, type Model } from "../model";
 import { section } from "./common";
+import { diagramPanel } from "./diagramPanel";
+import { componentPage } from "./pages";
+import { diagramFocus, sbsDiagramPanel, sbsSourcePanel, sbsTreePanel, treeFocus, versionCtx, type Which } from "./sideBySide";
 
 const KINDS: Kind[] = ["complexType", "simpleType", "element", "attribute", "group", "attributeGroup"];
 
@@ -26,7 +29,7 @@ export function diffHref(ctx: AppCtx, c: ComponentDiff): string {
   return ctx.hrefRoute({ view: "diffc", query: `${KIND_SLUG[c.kind]}/${qnameOf(c)}` });
 }
 
-function diffLink(ctx: AppCtx, c: ComponentDiff, text?: string): HTMLElement {
+export function diffLink(ctx: AppCtx, c: ComponentDiff, text?: string): HTMLElement {
   return h("a", { class: text ? "" : `mono d-${c.status}-text`, href: diffHref(ctx, c), onClick: (ev: Event) => {
     const me = ev as MouseEvent;
     if (me.metaKey || me.ctrlKey || me.shiftKey) return;
@@ -297,14 +300,78 @@ function changeRow(c: Change): HTMLElement {
   return h("tr", { class: `d-row d-${m}` }, h("td", { class: "mk" }, mark(m)), h("td", null, changeLabel(c.kind)), h("td", { class: "mono" }, c.path ? h("span", { class: "faint" }, c.path + " › ") : null, c.subject ?? ""), h("td", null, values), h("td", null, impactBadge(c.impact) ?? h("span", { class: "faint small" }, "non-breaking")));
 }
 
-/** One changed, added or removed component with both versions side by side. */
+const VIEWS = ["changes", "sbs", "old", "new"] as const;
+type CompareView = (typeof VIEWS)[number];
+
+/** Changes / Side by side / Old / New, kept in the link (`v=`). */
+function viewSwitch(ctx: AppCtx, cmp: Compare, c: ComponentDiff, v: CompareView): HTMLElement {
+  const query = `${KIND_SLUG[c.kind]}/${qnameOf(c)}`;
+  const labels: Record<CompareView, [string, string, string]> = {
+    changes: ["Changes", "table", "What changed, highlighted on the later version"],
+    sbs: ["Side by side", "columns", "Both versions next to each other: diagram, content tree and XSD source"],
+    old: ["Old", "history", `The whole page as it was in ${cmp.oldTitle}`],
+    new: ["New", "file", `The whole page as it is in ${cmp.newTitle}`],
+  };
+  return h(
+    "div",
+    { class: "view-switch", role: "group", "aria-label": "Compare view" },
+    h("div", { class: "btn-group" }, VIEWS.map((k) => {
+      const [label, ic, title] = labels[k];
+      const missing = (k === "old" && !c.old) || (k === "new" && !c.new);
+      return button(label, () => ctx.goRoute({ view: "diffc", query, params: k === "changes" ? {} : { v: k } }), { cls: "small", icon: ic, pressed: v === k, title: missing ? `${title} (it is not in that version: shows the other one)` : title });
+    })),
+    h("span", { class: "faint small vs-titles" }, h("span", { class: "d-removed-text" }, "Old"), ` = ${cmp.oldTitle} · `, h("span", { class: "d-added-text" }, "New"), ` = ${cmp.newTitle}`)
+  );
+}
+
+/** One version's whole normal page of the component; the other version's when it is not in this one. */
+function versionView(ctx: AppCtx, cmp: Compare, c: ComponentDiff, want: Which): HTMLElement[] {
+  const side = (w: Which) => (w === "old" ? c.old : c.new);
+  const which: Which = side(want) ? want : want === "old" ? "new" : "old";
+  const id = side(which)!.id;
+  const title = (w: Which) => (w === "old" ? cmp.oldTitle : cmp.newTitle);
+  const vctx = versionCtx(ctx, cmp, which, { id, route: ctx.route });
+  const note =
+    which !== want
+      ? h("div", { class: `diff-banner d-${c.status}` }, mark(c.status), " ", h("span", null, h("code", null, qnameOf(c)), ` is not in ${title(want)}. This is the page of ${title(which)}.`))
+      : h("div", { class: `diff-banner side-${which}` }, h("span", null, "The page of ", h("strong", null, title(which)), which === "old" ? ", the earlier version. Its links lead to that version's pages." : ", the later version."));
+  return [note, componentPage(vctx, id)];
+}
+
+/** The diagram (or content tree) and the XSD source of both versions next to each other. */
+function sbsView(ctx: AppCtx, cmp: Compare, c: ComponentDiff): HTMLElement[] {
+  const query = `${KIND_SLUG[c.kind]}/${qnameOf(c)}`;
+  const fo = diagramFocus(cmp.old, c.old?.id);
+  const fn = diagramFocus(cmp.cur, c.new?.id);
+  const to = treeFocus(cmp.old, c.old?.id);
+  const tn = treeFocus(cmp.cur, c.new?.id);
+  const hasDiagram = fo !== undefined || fn !== undefined;
+  const hasTree = to !== undefined || tn !== undefined;
+  const out: HTMLElement[] = [];
+  if (hasDiagram || hasTree) {
+    const tab = ctx.route.tab === "tree" || !hasDiagram ? "tree" : "diagram";
+    const go = (t: string) => ctx.goRoute({ view: "diffc", query, tab: t, params: { v: "sbs", ...(ctx.route.params.sync ? { sync: ctx.route.params.sync } : {}) } });
+    const tabs = h("div", { class: "btn-group", style: { marginLeft: "auto" } }, hasDiagram ? button("Diagram", () => go("diagram"), { icon: "diagram", cls: "small", pressed: tab === "diagram" }) : null, hasTree ? button("Content tree", () => go("tree"), { icon: "tree", cls: "small", pressed: tab === "tree" }) : null);
+    out.push(section(tab === "diagram" ? "Diagram" : "Content tree", { tools: [tabs] }));
+    out.push(tab === "diagram" ? sbsDiagramPanel(ctx, cmp, fo, fn) : sbsTreePanel(ctx, cmp, to, tn));
+  }
+  out.push(section("XSD source"), sbsSourcePanel(ctx, cmp, c));
+  return out;
+}
+
+/** One changed, added or removed component: what changed, both versions side by side, or either version's page. */
 export function diffComponentPage(ctx: AppCtx, cmp: Compare, c: ComponentDiff): HTMLElement {
   const page = h("div", { class: "diff-page" });
+  const v: CompareView = (VIEWS as readonly string[]).includes(ctx.route.params.v ?? "") ? (ctx.route.params.v as CompareView) : "changes";
   const back = h("a", { href: ctx.hrefRoute({ view: "diff" }), onClick: (ev: Event) => {
     ev.preventDefault();
     ctx.goRoute({ view: "diff" });
   } }, "All changes");
   page.appendChild(h("div", { class: "crumbs" }, back, h("span", { class: "sep" }, "›"), h("span", null, qnameOf(c))));
+  if (v === "old" || v === "new") {
+    page.append(viewSwitch(ctx, cmp, c, v), ...versionView(ctx, cmp, c, v));
+    return page;
+  }
   const open = c.new ? button(`Open in ${cmp.newTitle}`, () => ctx.go(c.new!.id), { icon: "external", cls: "small" }) : null;
   page.appendChild(
     h(
@@ -318,11 +385,18 @@ export function diffComponentPage(ctx: AppCtx, cmp: Compare, c: ComponentDiff): 
       open)
     )
   );
+  page.appendChild(viewSwitch(ctx, cmp, c, v));
+  if (v === "sbs") {
+    page.append(...sbsView(ctx, cmp, c));
+    return page;
+  }
   const ch = c.changes ?? [];
   if (ch.length) {
     const sorted = [...ch].sort((a, b) => (a.impact === b.impact ? 0 : a.impact === "breaking" ? -1 : b.impact === "breaking" ? 1 : a.impact === "info" ? 1 : -1));
     page.append(section("Changes", { count: ch.length }), h("table", { class: "ptable change-table" }, h("thead", null, h("tr", null, h("th", null, h("span", { class: "sr-only" }, "Kind")), h("th", null, "Change"), h("th", null, "Where"), h("th", null, "Old → new"), h("th", null, "Impact"))), h("tbody", null, sorted.map(changeRow))));
   }
+  const fn = diagramFocus(cmp.cur, c.new?.id);
+  if (fn !== undefined) page.append(section("Diagram of the new version, changes marked"), diagramPanel(ctx, fn), h("p", { class: "faint hint" }, "Removed lines are listed struck through in their box. To see each version's own diagram, choose ", h("strong", null, "Side by side"), "."));
   const labels: [string, string] = [cmp.oldTitle, cmp.newTitle];
   const o = c.old ? c.old.id : undefined;
   const n = c.new ? c.new.id : undefined;

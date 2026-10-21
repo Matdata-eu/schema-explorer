@@ -5,6 +5,7 @@
 import { Diagram, MONO, SANS, measure, type DiagramCallbacks, type NodeAction, type View } from "./diagram";
 import { s } from "./dom";
 import { MARKER, type Compare, type Mark } from "./diff";
+import { diffSeq } from "./textdiff";
 import { isId, occursText, type Id, type Model, type Particle, type Ref } from "./model";
 
 /** Compare mode: the diff whose changes the tree marks. */
@@ -48,6 +49,12 @@ export interface TNode {
   children: () => TNode[];
   /** Compare mode: how it differs from the earlier version. */
   diff?: Mark;
+  /** Side-by-side compare: a blank row standing for an item only the other version has. */
+  gap?: boolean;
+  /** A blank inside a blank: drawn as nothing. */
+  gapHidden?: boolean;
+  /** Side-by-side compare: the room the node takes, the same on both sides so rows line up. */
+  align?: { w: number; h: number; note: boolean; occ: boolean };
 }
 
 const NAME_FONT = `600 13px ${SANS}`;
@@ -144,6 +151,11 @@ interface Placed {
 }
 
 function nodeSize(n: TNode): { w: number; h: number } {
+  if (n.align) return { w: n.align.w, h: n.align.h };
+  return ownSize(n);
+}
+
+function ownSize(n: TNode): { w: number; h: number } {
   if (n.kind === "sequence" || n.kind === "choice" || n.kind === "all") return { w: COMP_W, h: COMP_H };
   if (n.kind === "attrs") {
     const lines = n.lines ?? [];
@@ -168,13 +180,14 @@ function isOpen(n: TNode, open: Set<string>): boolean {
 
 function place(n: TNode, x: number, y: number, open: Set<string>, budget: { n: number }): Placed {
   const { w, h } = nodeSize(n);
-  const extra = n.note ? 14 : 0;
+  const extra = n.note || n.align?.note ? 14 : 0;
+  const occ = n.min !== 1 || n.max !== 1 || n.align?.occ ? 12 : 0;
   const o = isOpen(n, open) && budget.n > 0;
   const span = Math.max(w, n.note ? Math.ceil(measure(n.note, SMALL_FONT)) + 6 : 0);
   const p: Placed = { n, x, y: y + extra, w, h, span, kids: [], open: o };
   budget.n--;
   if (!o) {
-    (p as Placed & { total: number }).total = h + extra + (n.min !== 1 || n.max !== 1 ? 12 : 0);
+    (p as Placed & { total: number }).total = h + extra + occ;
     return p;
   }
   let cy = y;
@@ -184,7 +197,7 @@ function place(n: TNode, x: number, y: number, open: Set<string>, budget: { n: n
     cy += (k as Placed & { total: number }).total + GAP_Y;
   }
   const kidsH = Math.max(0, cy - y - GAP_Y);
-  const own = h + extra + (n.min !== 1 || n.max !== 1 ? 12 : 0);
+  const own = h + extra + occ;
   // Centre the node on its children.
   if (kidsH > own) p.y = y + extra + (kidsH - own) / 2;
   (p as Placed & { total: number }).total = Math.max(own, kidsH);
@@ -222,15 +235,16 @@ export class TreeView extends Diagram {
         maxY = Math.max(maxY, p.y + p.h + 16);
         nodes.appendChild(this.drawTNode(p));
         if (!p.kids.length) return;
-        const sx = p.x + p.w + (p.n.expandable ? 8 : 0);
-        const sy = p.y + p.h / 2;
-        const bx = p.x + p.span + GAP_X / 2;
-        const ys = p.kids.map((k) => k.y + k.h / 2);
-        edges.appendChild(s("path", { d: `M${sx} ${sy}H${bx}M${bx} ${Math.min(...ys, sy)}V${Math.max(...ys, sy)}` }));
-        for (const k of p.kids) {
-          edges.appendChild(s("path", { d: `M${bx} ${k.y + k.h / 2}H${k.x}` }));
-          draw(k);
+        const real = p.kids.filter((k) => !k.n.gap);
+        if (real.length && !p.n.gap) {
+          const sx = p.x + p.w + (p.n.expandable ? 8 : 0);
+          const sy = p.y + p.h / 2;
+          const bx = p.x + p.span + GAP_X / 2;
+          const ys = real.map((k) => k.y + k.h / 2);
+          edges.appendChild(s("path", { d: `M${sx} ${sy}H${bx}M${bx} ${Math.min(...ys, sy)}V${Math.max(...ys, sy)}` }));
+          for (const k of real) edges.appendChild(s("path", { d: `M${bx} ${k.y + k.h / 2}H${k.x}` }));
         }
+        for (const k of p.kids) draw(k);
       };
       draw(laid);
       return { w: maxX, h: maxY };
@@ -243,6 +257,12 @@ export class TreeView extends Diagram {
     const n = p.n;
     const optional = n.min === 0;
     const many = n.max === null || n.max > 1;
+    if (n.gap) {
+      // Only the other version has this item: a faint blank keeps the rows lined up.
+      const g = s("g", { class: "tn gap", transform: `translate(${p.x} ${p.y})` });
+      if (!n.gapHidden) g.appendChild(s("rect", { class: "gap", width: p.w, height: p.h, rx: 4 }));
+      return g;
+    }
     const g = s("g", { class: `tn ${n.kind}${optional ? " optional" : ""}${n.diff ? ` d-${n.diff}` : ""}`, transform: `translate(${p.x} ${p.y})` });
     if (n.note) g.appendChild(s("text", { class: "note", x: 0, y: -7 }, n.note));
     if (n.kind === "sequence" || n.kind === "choice" || n.kind === "all") {
@@ -343,6 +363,85 @@ export class TreeView extends Diagram {
 .tn text.attr-line.d-added{fill:${v("--se-add")}}
 .tn text.attr-line.d-changed{fill:${v("--se-chg")}}
 .tn text.attr-line.d-removed{fill:${v("--se-del")};text-decoration:line-through}
+.tn rect.gap{fill:none;stroke:${v("--se-border")};stroke-dasharray:2 4}
 `;
   }
+}
+
+// ---- side by side ----------------------------------------------------------
+
+/** What identifies a node among its siblings in both versions. */
+const matchKey = (n: TNode) => (n.kind === "element" || n.kind === "group" ? `${n.kind} ${n.label}` : n.kind === "any" ? "any" : `${n.kind} ${n.note ?? ""}`);
+const isCompositor = (n: TNode) => n.kind === "sequence" || n.kind === "choice" || n.kind === "all";
+
+/** Line a node's attribute list up with the other version's, marking what differs. */
+function markAttrLines(a: string[], b: string[]): [string[], string[]] {
+  const name = (l: string) => l.split(" : ")[0].replace(/ \?$/, "");
+  const ma = new Map(a.map((l) => [name(l), l]));
+  const mb = new Map(b.map((l) => [name(l), l]));
+  const side = (lines: string[], other: Map<string, string>, gone: Mark) =>
+    lines.map((l) => {
+      const o = other.get(name(l));
+      return o === undefined ? markLine(gone, l) : o !== l ? markLine("changed", l) : l;
+    });
+  return [side(a, mb, "removed"), side(b, ma, "added")];
+}
+
+function sameNode(a: TNode, b: TNode): boolean {
+  return a.typeName === b.typeName && a.min === b.min && a.max === b.max && a.kind === b.kind && (a.lines ?? []).join("\n") === (b.lines ?? []).join("\n");
+}
+
+/** Pair the children of two versions of a node: matching items share a row, the rest get a blank on the other side. */
+function pairKids(a: TNode[], b: TNode[]): [TNode | undefined, TNode | undefined][] {
+  const ops = diffSeq(a, b, (x, y) => matchKey(x) === matchKey(y));
+  const out: [TNode | undefined, TNode | undefined][] = [];
+  let dels: TNode[] = [];
+  let ins: TNode[] = [];
+  const flush = () => {
+    // A compositor that changed kind (sequence → choice) still lines up with the old one.
+    while (dels.length && ins.length && isCompositor(dels[0]) && isCompositor(ins[0]) && dels[0].note === ins[0].note) out.push([dels.shift(), ins.shift()]);
+    for (const x of dels) out.push([x, undefined]);
+    for (const y of ins) out.push([undefined, y]);
+    dels = [];
+    ins = [];
+  };
+  for (const o of ops) {
+    if (o.t === "eq") {
+      flush();
+      out.push([a[o.a!], b[o.b!]]);
+    } else if (o.t === "del") dels.push(a[o.a!]);
+    else ins.push(b[o.b!]);
+  }
+  flush();
+  return out;
+}
+
+/**
+ * The content trees of two versions, made to line up row by row: matching
+ * items sit at the same place, an item only one version has leaves a blank on
+ * the other side, and what differs is marked (+, −, ~). Keys are shared, so
+ * opening a node opens it on both sides.
+ */
+export function pairTrees(a: TNode | undefined, b: TNode | undefined, key = "r", inGap = false): [TNode, TNode] {
+  let kids: [TNode, TNode][] | null = null;
+  const children = () => (kids ??= pairKids(a?.expandable ? a.children() : [], b?.expandable ? b.children() : []).map(([x, y], i) => pairTrees(x, y, `${key}.${i}`, !a || !b)));
+  const expandable = !!(a?.expandable || b?.expandable);
+  let la: string[] | undefined = a?.lines;
+  let lb: string[] | undefined = b?.lines;
+  if (a?.kind === "attrs" && b?.kind === "attrs") [la, lb] = markAttrLines(a.lines ?? [], b.lines ?? []);
+  const diffA: Mark | undefined = !b ? "removed" : a && !sameNode(a, b) ? "changed" : undefined;
+  const diffB: Mark | undefined = !a ? "added" : b && !sameNode(a, b) ? "changed" : undefined;
+  const one = (n: TNode | undefined, lines: string[] | undefined, diff: Mark | undefined, other: TNode): TNode =>
+    n
+      ? { ...n, key, lines, diff: n.kind === "attrs" ? undefined : diff, expandable, children: () => children().map((p) => p[n === a ? 0 : 1]) }
+      : { ...other, key, gap: true, gapHidden: inGap, diff: undefined, note: undefined, lines: other.kind === "attrs" ? lines : other.lines, expandable, children: () => children().map((p) => p[other === a ? 1 : 0]) };
+  const left = one(a, la, diffA, b!);
+  const right = one(b, lb, diffB, a!);
+  // The same room on both sides.
+  const sa = ownSize(left.gap ? { ...left, gap: false } : left);
+  const sb = ownSize(right.gap ? { ...right, gap: false } : right);
+  const align = { w: Math.max(sa.w, sb.w), h: Math.max(sa.h, sb.h), note: !!(a?.note || b?.note), occ: [a, b].some((n) => n && (n.min !== 1 || n.max !== 1)) };
+  left.align = align;
+  right.align = align;
+  return [left, right];
 }

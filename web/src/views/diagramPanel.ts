@@ -74,7 +74,7 @@ const zoomButtons = (d: Diagram) =>
   h("div", { class: "btn-group" }, button("", () => d.zoomBy(1.25), { cls: "small icon-only", icon: "plus", title: "Zoom in" }), button("", () => d.zoomBy(0.8), { cls: "small icon-only", icon: "minus", title: "Zoom out" }), button("", () => d.fit(), { cls: "small icon-only", icon: "fit", title: "Fit" }));
 
 const idsParam = (set: Set<Id>) => [...set].join(" ");
-const parseIds = (s: string | undefined, max: number) => new Set((s ?? "").split(" ").map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < max));
+const parseIds = (s: string | undefined, max: number) => new Set((s ?? "").split(" ").filter(Boolean).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < max));
 
 /** The class diagram of a complex type and its neighbours. */
 export function diagramPanel(ctx: AppCtx, focus: Id, opts: { tall?: boolean } = {}): HTMLElement {

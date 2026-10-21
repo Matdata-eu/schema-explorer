@@ -55,7 +55,8 @@ export class SchemaExplorerElement extends HTMLElement {
     const focus = this.getAttribute("focus") ?? q?.get("focus") ?? null;
     const sources = this.getAttribute("sources") ?? q?.get("sources") ?? null;
     const compare = this.getAttribute("compare") ?? q?.get("compare") ?? null;
-    void this.app.start(src, focus, sources, compare);
+    const compareSources = this.getAttribute("compare-sources") ?? q?.get("compareSources") ?? null;
+    void this.app.start(src, focus, sources, compare, compareSources);
   }
 
   disconnectedCallback(): void {

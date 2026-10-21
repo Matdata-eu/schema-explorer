@@ -46,7 +46,7 @@ function ellipsize(text: string, max: number, font = FONT): string {
   return text.slice(0, Math.max(1, lo)) + "…";
 }
 
-interface Sized {
+export interface Sized {
   w: number;
   h: number;
   /** Rows of (group header | attribute) in display order. */
@@ -89,6 +89,8 @@ export interface DiagramCallbacks {
   onViewChange?: (view: View | null) => void;
   /** Actions offered when a box is clicked. Without them, a click opens the entity. */
   nodeMenu?: (id: number) => NodeAction[];
+  /** Every pan and zoom by the user, at once (to move a linked diagram along). */
+  onTransform?: (view: View) => void;
 }
 
 export interface View {
@@ -111,6 +113,61 @@ export interface RenderOptions {
   view?: View;
   /** Use ELK's stress layout (for maps) instead of layered. */
   algorithm?: "layered" | "stress";
+  /**
+   * Positions from a layout of a bigger graph (compare mode: both versions
+   * together), so boxes sit at the same place in two diagrams. Only the
+   * boxes and lines of `spec` are drawn, each at the size of the bigger graph.
+   */
+  shared?: Promise<LaidGraph>;
+}
+
+/** A graph laid out by ELK and the box sizes it was given. */
+export interface LaidGraph {
+  laid: ElkNode;
+  sizes: Map<string, Sized>;
+}
+
+/** Lay out a graph with ELK, boxes sized by their text. */
+export async function layoutGraph(spec: GraphSpec, opts: { direction: "DOWN" | "RIGHT"; algorithm?: "layered" | "stress" }): Promise<LaidGraph> {
+  await document.fonts?.ready;
+  const sizes = new Map<string, Sized>();
+  for (const n of spec.nodes) sizes.set(n.key, size(n));
+  const algorithm = opts.algorithm ?? "layered";
+  const elkGraph: ElkNode = {
+    id: "root",
+    layoutOptions: {
+      "elk.algorithm": algorithm,
+      "elk.direction": opts.direction,
+      "elk.spacing.nodeNode": algorithm === "stress" ? "60" : "36",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "70",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "30",
+      "elk.spacing.edgeNode": "24",
+      "elk.spacing.edgeEdge": "16",
+      "elk.spacing.edgeLabel": "6",
+      "elk.edgeRouting": algorithm === "stress" ? "POLYLINE" : "ORTHOGONAL",
+      "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+      "elk.layered.crossingMinimization.semiInteractive": "true",
+      "elk.layered.mergeEdges": "false",
+      "elk.edgeLabels.inline": "false",
+      "elk.stress.desiredEdgeLength": "180",
+      "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+    },
+    children: spec.nodes.map((n) => {
+      const sz = sizes.get(n.key)!;
+      return { id: n.key, width: sz.w, height: sz.h };
+    }),
+    edges: spec.edges.map((e) => ({
+      id: e.key,
+      // Generalisations are drawn from the super class (source) to the sub
+      // class so the hierarchy reads top-down; the triangle sits at the source.
+      sources: [e.from],
+      targets: [e.to],
+      labels: e.label ? [{ text: edgeLabel(e.label), width: Math.ceil(measure(edgeLabel(e.label), EDGE_FONT)) + 6, height: 14 }] : undefined,
+      layoutOptions: e.kind === "gen" || e.kind === "restr" ? { "elk.layered.priority.direction": "10" } : undefined,
+    })),
+  };
+  return { laid: await layout(elkGraph), sizes };
 }
 
 export class Diagram {
@@ -158,49 +215,19 @@ export class Diagram {
     const my = ++this.seq;
     this.spec = spec;
     this.closeMenu();
-    // Boxes are sized by measuring text, so wait for the web fonts.
-    await document.fonts?.ready;
-    if (my !== this.seq) return;
-    const sizes = new Map<string, Sized>();
-    for (const n of spec.nodes) sizes.set(n.key, size(n));
-    const algorithm = opts.algorithm ?? "layered";
-    const elkGraph: ElkNode = {
-      id: "root",
-      layoutOptions: {
-        "elk.algorithm": algorithm,
-        "elk.direction": opts.direction,
-        "elk.spacing.nodeNode": algorithm === "stress" ? "60" : "36",
-        "elk.layered.spacing.nodeNodeBetweenLayers": "70",
-        "elk.layered.spacing.edgeNodeBetweenLayers": "30",
-        "elk.spacing.edgeNode": "24",
-        "elk.spacing.edgeEdge": "16",
-        "elk.spacing.edgeLabel": "6",
-        "elk.edgeRouting": algorithm === "stress" ? "POLYLINE" : "ORTHOGONAL",
-        "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
-        "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-        "elk.layered.crossingMinimization.semiInteractive": "true",
-        "elk.layered.mergeEdges": "false",
-        "elk.edgeLabels.inline": "false",
-        "elk.stress.desiredEdgeLength": "180",
-        "elk.padding": "[top=20,left=20,bottom=20,right=20]",
-      },
-      children: spec.nodes.map((n) => {
-        const sz = sizes.get(n.key)!;
-        return { id: n.key, width: sz.w, height: sz.h };
-      }),
-      edges: spec.edges.map((e) => ({
-        id: e.key,
-        // Generalisations are drawn from the super class (source) to the sub
-        // class so the hierarchy reads top-down; the triangle sits at the source.
-        sources: [e.from],
-        targets: [e.to],
-        labels: e.label ? [{ text: edgeLabel(e.label), width: Math.ceil(measure(edgeLabel(e.label), EDGE_FONT)) + 6, height: 14 }] : undefined,
-        layoutOptions: e.kind === "gen" || e.kind === "restr" ? { "elk.layered.priority.direction": "10" } : undefined,
-      })),
-    };
     let laid: ElkNode;
+    let sizes: Map<string, Sized>;
     try {
-      laid = await layout(elkGraph);
+      if (opts.shared) {
+        const shared = await opts.shared;
+        laid = shared.laid;
+        // Each box shows its own lines in the room the bigger graph gave it.
+        sizes = new Map(spec.nodes.map((n) => {
+          const own = size(n);
+          const room = shared.sizes.get(n.key);
+          return [n.key, room ? { ...own, w: room.w, h: room.h } : own];
+        }));
+      } else ({ laid, sizes } = await layoutGraph(spec, opts));
     } catch (e) {
       this.cb.onStatus?.(`layout failed: ${(e as Error).message}`);
       return;
@@ -482,6 +509,7 @@ export class Diagram {
   /** `byUser`: a pan or zoom worth remembering in the link to this view. */
   protected applyTransform(byUser = true): void {
     this.viewport.setAttribute("transform", `translate(${this.tx} ${this.ty}) scale(${this.scale})`);
+    if (byUser) this.cb.onTransform?.(this.view);
     if (byUser && this.cb.onViewChange) {
       clearTimeout(this.viewTimer);
       this.viewTimer = setTimeout(() => this.cb.onViewChange?.({ tx: this.tx, ty: this.ty, scale: this.scale }), 400);
@@ -492,6 +520,17 @@ export class Diagram {
   protected focusAt: { x: number; y: number } | null = null;
   /** The smallest scale "fit" goes down to; beyond it the view centres on the focus. */
   minFitScale = 0.45;
+
+  /** The current pan and zoom. */
+  get view(): View {
+    return { tx: this.tx, ty: this.ty, scale: this.scale };
+  }
+
+  /** Pan and zoom to `v` (a linked diagram moved), without telling onTransform. */
+  setView(v: View): void {
+    ({ tx: this.tx, ty: this.ty, scale: this.scale } = v);
+    this.applyTransform(false);
+  }
 
   fit(): void {
     const box = this.svg.getBoundingClientRect();
@@ -661,6 +700,12 @@ text.attr.d-removed{fill:${v("--se-del")};text-decoration:line-through}
 text.attr.d-changed{fill:${v("--se-chg")}}
 .edge.d-added path{stroke:${v("--se-add")};stroke-width:2}
 .edge.d-changed path{stroke:${v("--se-chg")};stroke-width:2}
+.node.d-removed rect.box{stroke:${v("--se-del")};stroke-width:2.5;stroke-dasharray:6 3}
+.node.d-removed text.name{fill:${v("--se-del")};text-decoration:line-through}
+.edge.d-removed path{stroke:${v("--se-del")};stroke-width:2;stroke-dasharray:6 3}
+.edge.d-added text{fill:${v("--se-add")}}
+.edge.d-removed text{fill:${v("--se-del")};text-decoration:line-through}
+.edge.d-changed text{fill:${v("--se-chg")}}
 ${this.extraCss()}`;
   }
 
