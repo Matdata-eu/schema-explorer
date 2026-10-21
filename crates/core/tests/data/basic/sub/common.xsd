@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Chameleon include: no targetNamespace. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attributeGroup name="Common">
+    <xs:attribute name="created" type="xs:dateTime"/>
+    <xs:attribute name="unit" type="Unit"/>
+  </xs:attributeGroup>
+  <xs:simpleType name="Unit">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="m"/>
+      <xs:enumeration value="km"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>

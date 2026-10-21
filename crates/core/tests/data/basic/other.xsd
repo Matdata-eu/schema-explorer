@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="urn:test:other"
+            targetNamespace="urn:test:other" attributeFormDefault="unqualified">
+  <xsd:attribute name="flag" type="xsd:boolean"/>
+  <xsd:complexType name="Tag" mixed="true">
+    <xsd:all>
+      <xsd:element name="label" type="xsd:string" minOccurs="0"/>
+    </xsd:all>
+  </xsd:complexType>
+</xsd:schema>
