@@ -22,17 +22,17 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Use the release version
         run: scripts/set-version.sh "${GITHUB_REF#refs/tags/v}"
       - uses: ./.github/actions/build-web
         with:
           lib: "true"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: web/dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-dist-lib
           path: web/dist-lib
@@ -46,12 +46,12 @@ jobs:
     env:
       HAS_CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Use the release version
         run: scripts/set-version.sh "${GITHUB_REF#refs/tags/v}"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: crates/cli/web-dist
@@ -86,7 +86,7 @@ jobs:
           - { target: aarch64-apple-darwin, os: macos-latest, archive: tar.gz }
           - { target: x86_64-pc-windows-msvc, os: windows-latest, archive: zip }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -100,7 +100,7 @@ jobs:
           sed -i.bak -E "s/^version = \"[^\"]+\"/version = \"$V\"/" Cargo.toml
           sed -i.bak -E "s/(schema-explorer-core = \{ path = \"[^\"]+\", version = \")[^\"]+\"/\1$V\"/" Cargo.toml crates/wasm/Cargo.toml
           rm -f Cargo.toml.bak crates/wasm/Cargo.toml.bak
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: web/dist
@@ -116,7 +116,7 @@ jobs:
           if [ "${{ matrix.archive }}" = zip ]; then 7z a "$NAME.zip" "$NAME" >/dev/null; echo "ASSET=$NAME.zip" >> "$GITHUB_ENV"
           else tar czf "$NAME.tar.gz" "$NAME"; echo "ASSET=$NAME.tar.gz" >> "$GITHUB_ENV"; fi
       - name: Attach to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ env.ASSET }}
 
@@ -127,14 +127,14 @@ jobs:
     permissions:
       id-token: write # npm trusted publishing and provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - name: Trusted publishing needs npm 11.5 or later
         run: npm install -g npm@latest
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: web-dist-lib
           path: web/dist-lib
