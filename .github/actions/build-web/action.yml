@@ -20,7 +20,7 @@ runs:
         if [ "$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')" != "$V" ]; then
           cargo install wasm-bindgen-cli --version "$V" --locked --force
         fi
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: 22
         cache: npm
