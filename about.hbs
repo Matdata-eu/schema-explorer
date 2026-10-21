@@ -23,14 +23,28 @@ includes:
 ELK.js is distributed unmodified; its source code is available at
 <https://github.com/kieler/elkjs> and <https://github.com/eclipse/elk>.
 
-The NeTEx schemas shown as an example on the website are fetched from
-<https://github.com/NeTEx-CEN/NeTEx> at build time and published with their
-licence (GPL-3.0); they are not part of this repository or the binary.
+The example schemas on the website are fetched from their publishers at build
+time (see `scripts/build-examples.sh`) and published with their own terms;
+they are not part of this repository or the binary:
+
+- **NeTEx**, from <https://github.com/NeTEx-CEN/NeTEx>, GPL-3.0.
+- **TAF TSI** (technical documents baseline 3.5.0) and **TAP TSI B.10** (1.4)
+  XML schemas. Source: European Union Agency for Railways,
+  <https://www.era.europa.eu>. "Reproduction is authorised, provided the
+  source is acknowledged" ([ERA disclaimer and copyright notice](https://www.era.europa.eu/content/disclaimer-and-copyright-notice)).
+- **UBL 2.4**, Universal Business Language Version 2.4, OASIS Standard,
+  <https://docs.oasis-open.org/ubl/os-UBL-2.4/>. Copyright © OASIS Open 2024.
+  All Rights Reserved. Distributed under the
+  [OASIS IPR Policy](https://www.oasis-open.org/policies-guidelines/ipr/).
+- **XML Schema** schema for schemas, <https://www.w3.org/2001/XMLSchema.xsd>
+  with <https://www.w3.org/2001/xml.xsd>. Copyright © World Wide Web
+  Consortium. Used under the
+  [W3C Document License](https://www.w3.org/copyright/document-license-2023/).
 
 ## Data
 
-- Schemas shown on the project website (such as NeTEx, from
-  <https://github.com/NeTEx-CEN/NeTEx>) are fetched at build time under their
+- Schemas shown on the project website (NeTEx, ERA TAF/TAP TSI, OASIS UBL,
+  W3C XML Schema; see above) are fetched at build time under their
   own licences. They are not part of the schema-explorer software.
 
 ## Rust crates

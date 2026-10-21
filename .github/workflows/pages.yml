@@ -2,9 +2,9 @@ name: Pages
 
 # Publishes the viewer on GitHub Pages:
 # https://matdata-eu.github.io/schema-explorer/
-# with an examples catalog of freely redistributable schemas only: NeTEx is
-# cloned from its public repository and pre-indexed here (see
-# scripts/build-examples.sh). railML and other non-redistributable schemas are
+# with an examples catalog of freely redistributable schemas only: NeTEx,
+# ERA TAF/TAP TSI, OASIS UBL 2.4 and the W3C schema for schemas are fetched
+# from their publishers and pre-indexed here (see scripts/build-examples.sh). railML and other non-redistributable schemas are
 # never published.
 
 on:
@@ -29,7 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build-web
-      - name: Build the examples (NeTEx, fetched at build time)
+      - name: Cache the example downloads
+        uses: actions/cache@v4
+        with:
+          path: tests/fixtures/downloads
+          key: examples-${{ hashFiles('scripts/build-examples.sh') }}
+      - name: Build the examples (fetched at build time)
         run: |
           cargo build --release --locked -p schema-explorer
           scripts/build-examples.sh ./target/release/schema-explorer web/dist

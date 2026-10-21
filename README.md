@@ -7,7 +7,8 @@ schema counterpart of [ontology-explorer](https://github.com/Matdata-eu/ontology
 **Status: early development.** The viewer works on real schema sets (NeTEx,
 railML); expect changes.
 
-Website, with NeTEx as an example: <https://matdata-eu.github.io/schema-explorer/>
+Website, with NeTEx, ERA TAF/TAP TSI, OASIS UBL and the W3C schema for
+schemas as examples: <https://matdata-eu.github.io/schema-explorer/>
 
 ![The page of a NeTEx complex type: derivation chain and class diagram](docs/screenshot-type.png)
 
@@ -95,6 +96,13 @@ pre-indexes a schema set into `bundle.json` and puts its `.xsd` files next
 to it (for the source view). Any static host works:
 `index.html?bundle=examples/netex/bundle.json&sources=examples/netex/xsd/`.
 Only publish schemas whose licence allows it.
+
+The website's examples are fetched from their publishers at build time and
+keep their own terms: NeTEx (GPL-3.0, NeTEx-CEN); TAF TSI and TAP TSI B.10
+schemas, source: European Union Agency for Railways (reproduction authorised,
+source acknowledged); UBL 2.4, copyright © OASIS Open 2024 (OASIS IPR
+Policy); XMLSchema.xsd and xml.xsd, copyright © W3C (W3C Document License).
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Development
 
