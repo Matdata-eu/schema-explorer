@@ -139,6 +139,22 @@ export interface Component {
   attributeGroup?: { attributes?: AttrItem[]; anyAttribute?: Wildcard };
   identity?: { selector: string; fields: string[]; refer?: Ref };
   builtin?: boolean;
+  /** JSON Schema details (bundles with language "jsonSchema"). */
+  json?: JsonInfo;
+}
+
+export interface JsonInfo {
+  /** A type: object, array, string, ..., oneOf, anyOf, union. An element: property, patternProperty, additionalProperties, items, option. */
+  kind: string;
+  /** JSON pointer in the file; absent for the root. */
+  pointer?: string;
+  title?: string;
+  examples?: string[];
+  deprecated?: boolean;
+  readOnly?: boolean;
+  writeOnly?: boolean;
+  /** A property whose value is an array of the element's type. */
+  array?: boolean;
 }
 
 export interface Directive {
@@ -156,6 +172,8 @@ export interface FileInfo {
   namespace?: number;
   prefixes?: Record<string, string>;
   version?: string;
+  /** JSON files: "JSON Schema 2020-12", "OpenAPI 3.1.0", ... */
+  dialect?: string;
   elementFormQualified?: boolean;
   attributeFormQualified?: boolean;
   input?: boolean;
@@ -175,6 +193,8 @@ export interface Diagnostic {
 export interface Bundle {
   format: number;
   generator: string;
+  /** Absent for XML Schema. */
+  language?: "jsonSchema";
   compact?: boolean;
   files: FileInfo[];
   namespaces: { uri: string; prefix: string }[];
@@ -204,6 +224,42 @@ export const KIND_LABEL: Record<Kind, string> = {
   keyref: "Key reference",
   unique: "Unique",
 };
+
+const XSD_LABEL = { ...KIND_LABEL };
+const JSON_LABEL: Partial<Record<Kind, string>> = { element: "Property", complexType: "Object", simpleType: "Scalar" };
+
+/** Words that differ between XML Schema and JSON Schema bundles. */
+export const TERMS = {
+  complexTypes: "complex types",
+  simpleTypes: "simple types",
+  elements: "elements",
+  typesTab: "Types",
+  simpleTab: "Simple",
+};
+const XSD_TERMS = { ...TERMS };
+const JSON_TERMS: typeof TERMS = { complexTypes: "object schemas", simpleTypes: "scalar schemas", elements: "properties", typesTab: "Objects", simpleTab: "Scalars" };
+
+/** The schema language of the bundle being shown. */
+export const LANG = { json: false };
+
+/** Switch the labels to the terms of the bundle's schema language. */
+export function applyLanguage(b: Bundle): void {
+  LANG.json = b.language === "jsonSchema";
+  Object.assign(KIND_LABEL, XSD_LABEL, b.language === "jsonSchema" ? JSON_LABEL : {});
+  Object.assign(TERMS, b.language === "jsonSchema" ? JSON_TERMS : XSD_TERMS);
+}
+
+const ROLE: Record<string, string> = { property: "Property", patternProperty: "Pattern property", additionalProperties: "Additional properties", items: "Array items", option: "Option" };
+
+/** The badge text of a JSON Schema component: "Object definition", "Property", ... */
+export function jsonLabel(c: Component): string | undefined {
+  const j = c.json;
+  if (!j) return undefined;
+  if (c.kind === "element") return ROLE[j.kind] ?? "Property";
+  if (c.builtin) return "JSON type";
+  const what = j.kind === "oneOf" || j.kind === "anyOf" ? j.kind : j.kind ? j.kind[0].toUpperCase() + j.kind.slice(1) : "Schema";
+  return c.parent === undefined ? `${what} definition` : `Inline ${j.kind || "schema"}`;
+}
 
 /** Short kind names used in links (#/ct/prefix:Name). */
 export const KIND_SLUG: Record<Kind, string> = {
@@ -257,6 +313,7 @@ export class Model {
   readonly xsNs: number | undefined;
 
   constructor(b: Bundle) {
+    applyLanguage(b);
     this.b = b;
     this.c = b.components;
     this.xsNs = b.namespaces.findIndex((n) => n.uri === XS);
@@ -284,7 +341,7 @@ export class Model {
   get title(): string {
     if (this.b.title) return this.b.title;
     const input = this.b.files.find((f) => f.input);
-    return input ? input.name.split("/").pop()! : "XML Schema";
+    return input ? input.name.split("/").pop()! : this.b.language === "jsonSchema" ? "JSON Schema" : "XML Schema";
   }
 
   comp(id: Id): Component {
@@ -307,8 +364,9 @@ export class Model {
   label(id: Id): string {
     const c = this.c[id];
     if (c.name) return c.name;
-    if (c.parent !== undefined) return `${this.label(c.parent)} (anonymous)`;
-    return "(anonymous)";
+    const anon = c.json ? "inline" : "anonymous";
+    if (c.parent !== undefined) return `${this.label(c.parent)} (${anon})`;
+    return `(${anon})`;
   }
 
   /** The text of a reference (resolved or not). */
@@ -328,7 +386,7 @@ export class Model {
     if (isId(r)) {
       const c = this.c[r];
       if (c.builtin || (c.ns !== undefined && c.ns === this.xsNs)) return c.name ?? "";
-      if (!c.name) return "(anonymous)";
+      if (!c.name) return c.json?.kind || "(anonymous)";
       return c.name;
     }
     return this.refName(r);

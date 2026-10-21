@@ -123,7 +123,7 @@ function stereo(m: Model, id: Id): string | undefined {
   const c = m.comp(id);
   const s: string[] = [];
   if (c.complexType?.abstract) s.push("abstract");
-  if (!c.name) s.push("anonymous");
+  if (!c.name) s.push(c.json ? "inline" : "anonymous");
   if (c.complexType?.mixed) s.push("mixed");
   return s.length ? `«${s.join(", ")}»` : undefined;
 }

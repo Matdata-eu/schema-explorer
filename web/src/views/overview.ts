@@ -3,6 +3,7 @@ import type { AppCtx } from "../ctx";
 import { Diagram } from "../diagram";
 import { button, h } from "../dom";
 import { buildOverview, folders, toMermaid, toPlantUml, type GraphSpec, type OverviewOptions } from "../graph";
+import { TERMS } from "../model";
 import { boxActions, exportControls, fullscreenButton, parseView, viewParam } from "./diagramPanel";
 
 export function overviewPage(ctx: AppCtx): HTMLElement {
@@ -16,7 +17,7 @@ export function overviewPage(ctx: AppCtx): HTMLElement {
   let view = parseView(P.view);
   let restoreView = view !== undefined;
   const sync = () => ctx.setParams({ ns: o.ns === undefined ? "all" : String(o.ns), folder: o.folder, assoc: o.associations ? "1" : undefined, max: o.maxNodes !== 250 ? String(o.maxNodes) : undefined, view: viewParam(view ?? null) });
-  page.appendChild(h("div", { class: "page-head" }, h("h1", null, "Overview map"), h("span", { class: "muted" }, "complex types and how they derive from each other")));
+  page.appendChild(h("div", { class: "page-head" }, h("h1", null, "Overview map"), h("span", { class: "muted" }, `${TERMS.complexTypes} and how they derive from each other`)));
   const wrap = h("div", { class: "diagram tall" });
   const statusText = h("span");
   const status = h("div", { class: "status" }, statusText, h("div", { class: "legend hide-mobile" }, h("span", { class: "gen" }, "extends"), h("span", { class: "restr" }, "restricts"), h("span", { class: "comp" }, "contains")));

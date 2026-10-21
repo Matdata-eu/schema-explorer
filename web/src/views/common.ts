@@ -1,11 +1,14 @@
 // Shared building blocks of the detail pages.
 import type { AppCtx } from "../ctx";
 import { button, copyText, h, type Child } from "../dom";
-import { KIND_LABEL, docsText, isId, type Doc, type Id, type Ref } from "../model";
-import { highlight, snippet } from "../source";
+import { jsonSource } from "../loader";
+import { KIND_LABEL, docsText, isId, jsonLabel, type Doc, type Id, type JsonInfo, type Ref } from "../model";
+import { highlight, highlightJson, snippet } from "../source";
 
 export function kindBadge(ctx: AppCtx, id: Id): HTMLElement {
   const c = ctx.m.comp(id);
+  const json = jsonLabel(c);
+  if (json) return h("span", { class: `badge k-${c.kind}` }, json);
   return h("span", { class: `badge k-${c.kind}` }, `${c.parent !== undefined && c.kind !== "complexType" && c.kind !== "simpleType" ? "Local " + KIND_LABEL[c.kind].toLowerCase() : c.parent !== undefined ? "Anonymous " + KIND_LABEL[c.kind].toLowerCase() : KIND_LABEL[c.kind]}`);
 }
 
@@ -87,7 +90,7 @@ export function pageHead(ctx: AppCtx, id: Id, badges: Child[] = []): HTMLElement
     "div",
     null,
     ...crumbs,
-    h("div", { class: "page-head" }, h("h1", { class: c.complexType?.abstract || c.element?.abstract ? "abstract" : "" }, m.label(id)), kindBadge(ctx, id), ...badges),
+    h("div", { class: "page-head" }, h("h1", { class: c.complexType?.abstract || c.element?.abstract ? "abstract" : "" }, m.label(id)), kindBadge(ctx, id), ...jsonBadges(c.json), ...badges),
     h(
       "div",
       { class: "iri-line" },
@@ -172,6 +175,7 @@ export function localPath(ctx: AppCtx, id: Id, owner: Id): HTMLElement {
 /** The component's XSD, cut from its file, loaded when opened. */
 export function sourceSection(ctx: AppCtx, id: Id): HTMLElement | null {
   const c = ctx.m.comp(id);
+  if (c.json) return jsonSourceSection(ctx, id);
   if (c.file === undefined || !c.line) return null;
   const file = c.file;
   const body = h("div", { class: "xsd-body" }, h("p", { class: "faint small" }, "Loading…"));
@@ -199,6 +203,58 @@ export function sourceSection(ctx: AppCtx, id: Id): HTMLElement | null {
   });
   if (det.open) void load();
   return det;
+}
+
+function jsonBadges(j: JsonInfo | undefined): Child[] {
+  if (!j) return [];
+  return [j.deprecated ? h("span", { class: "badge", title: "deprecated: true" }, "deprecated") : null, j.readOnly ? h("span", { class: "badge" }, "read-only") : null, j.writeOnly ? h("span", { class: "badge" }, "write-only") : null, j.title ? h("span", { class: "muted small" }, j.title) : null];
+}
+
+/** The component's schema as JSON (also for YAML files), loaded when opened. */
+function jsonSourceSection(ctx: AppCtx, id: Id): HTMLElement | null {
+  const c = ctx.m.comp(id);
+  if (c.file === undefined || !c.json) return null;
+  const file = c.file;
+  const name = ctx.m.b.files[file].name;
+  const pointer = c.json.pointer ?? "";
+  const body = h("div", { class: "xsd-body" }, h("p", { class: "faint small" }, "Loading…"));
+  const det = h("details", { class: "xsd-src", open: ctx.route.params.src === "1" || undefined }, h("summary", null, h("span", null, "JSON source"), h("span", { class: "faint small" }, ` ${name}#${pointer}`)), body);
+  let loaded = false;
+  const load = async () => {
+    if (loaded) return;
+    loaded = true;
+    const text = await ctx.sourceText(file);
+    if (text === null) {
+      body.replaceChildren(h("p", { class: "muted small" }, "The schema file is not available here: the bundle was loaded without its schema files."));
+      return;
+    }
+    let json: string;
+    try {
+      json = await jsonSource(name, text, pointer);
+    } catch {
+      body.replaceChildren(h("p", { class: "muted small" }, "Could not find the schema in the file."));
+      return;
+    }
+    const yaml = /\.ya?ml$/i.test(name);
+    const copy = button("Copy", () => copyText(json).then((ok) => ctx.toast(ok ? "JSON copied" : "Could not copy")), { icon: "copy", cls: "small" });
+    body.replaceChildren(h("div", { class: "xsd-tools" }, h("span", { class: "faint small" }, yaml ? "shown as JSON" : `${json.split("\n").length} lines`), copy), highlightJson(ctx.m, file, json, (target, text) => link(ctx, target, text)));
+  };
+  det.addEventListener("toggle", () => {
+    ctx.setParams({ src: det.open ? "1" : undefined });
+    if (det.open) void load();
+  });
+  if (det.open) void load();
+  const examples = c.json.examples ?? [];
+  if (!examples.length) return det;
+  return h("div", null, h("details", { class: "xsd-src" }, h("summary", null, h("span", null, examples.length === 1 ? "Example" : `Examples (${examples.length})`)), h("div", { class: "xsd-body" }, examples.map((e) => highlightJson(ctx.m, file, pretty(e), (target, text) => link(ctx, target, text))))), det);
+}
+
+function pretty(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json), null, 2);
+  } catch {
+    return json;
+  }
 }
 
 /** Facets as a definition list. */

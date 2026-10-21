@@ -1,7 +1,7 @@
 // Comparison of two versions of a schema set: the diff made by the core
 // (see crates/core/src/diff.rs) and lookups for the views that highlight it.
 import type { GraphSpec } from "./graph";
-import { KIND_SLUG, type Id, type Kind, type Model } from "./model";
+import { KIND_SLUG, LANG, type Id, type Kind, type Model } from "./model";
 
 export type Status = "added" | "removed" | "changed";
 export type Impact = "breaking" | "nonBreaking" | "info";
@@ -119,7 +119,16 @@ const LABELS: Record<string, string> = {
   docsChanged: "documentation changed",
 };
 
-export const changeLabel = (k: string): string => LABELS[k] ?? k;
+const JSON_LABELS: Record<string, string> = {
+  childAdded: "property added",
+  childRemoved: "property removed",
+  childRetyped: "property retyped",
+  childMoved: "property moved",
+  childrenReordered: "properties reordered",
+  substitutionMemberAdded: "substitution member added",
+  memberTypeAdded: "union member added",
+};
+export const changeLabel = (k: string): string => (LANG.json ? JSON_LABELS[k] : undefined) ?? LABELS[k] ?? k;
 
 /** The marker of a change: + for additions, − for removals, ~ otherwise. */
 export function changeMark(k: string): Status {
