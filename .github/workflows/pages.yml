@@ -2,6 +2,10 @@ name: Pages
 
 # Publishes the viewer on GitHub Pages:
 # https://matdata-eu.github.io/schema-explorer/
+# with an examples catalog of freely redistributable schemas only: NeTEx is
+# cloned from its public repository and pre-indexed here (see
+# scripts/build-examples.sh). railML and other non-redistributable schemas are
+# never published.
 
 on:
   push:
@@ -25,6 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build-web
+      - name: Build the examples (NeTEx, fetched at build time)
+        run: |
+          cargo build --release --locked -p schema-explorer
+          scripts/build-examples.sh ./target/release/schema-explorer web/dist
       - name: Add the notices
         run: |
           cp THIRD_PARTY_NOTICES.md web/dist/

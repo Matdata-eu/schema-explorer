@@ -23,3 +23,7 @@ schema-explorer-core.workspace = true
 anyhow.workspace = true
 clap = { version = "4", features = ["derive", "env"] }
 include_dir = "0.7"
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+serde_json.workspace = true
+webbrowser = "1"

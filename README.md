@@ -4,21 +4,61 @@ A visual explorer for XML Schema (XSD), and later JSON Schema, that runs in the
 browser and can be published as a static site (GitHub Pages). It is the
 schema counterpart of [ontology-explorer](https://github.com/Matdata-eu/ontology-explorer).
 
-**Status: early development.** Nothing usable yet; the parser and viewer are
-being built.
+**Status: early development.** The viewer works on real schema sets (NeTEx,
+railML); expect changes.
 
-Website: <https://matdata-eu.github.io/schema-explorer/>
+Website, with NeTEx as an example: <https://matdata-eu.github.io/schema-explorer/>
 
-## Planned features
+![The page of a NeTEx complex type: derivation chain and class diagram](docs/screenshot-type.png)
 
-- UML-like diagrams of complex types, elements and their relations
-- A readable page per type, element, attribute group and model group
-- Content-model trees (sequence / choice / all, cardinalities, substitution groups)
-- Search across all components
-- Following `include`, `import` and `ref` across files and namespaces
-- Comparing two versions of a schema set
-- A command-line tool (`schema-explorer serve` / `index`), a Docker image and
-  an embeddable `<schema-explorer>` web component (`@matdata/schema-explorer`)
+## Features
+
+- **Open** `.xsd` files or whole folders by drag and drop or the file picker:
+  they are indexed in the browser (WebAssembly, in a worker), nothing is
+  uploaded. Or open a pre-built bundle by its address (`?bundle=<url>`), or
+  pick an example.
+- **Sidebar**: complex types, simple types, global elements, groups and
+  attribute groups, and files, per namespace; search over names,
+  documentation and enumeration values. Lists are virtualised, so NeTEx's
+  2,600 complex types scroll smoothly.
+- **Type pages**: documentation, the derivation chain and derived types, the
+  effective content model (child elements with cardinality and type,
+  `sequence` / `choice` / `all` and groups, inherited rows grouped per base
+  type and foldable), attributes (type, use, default or fixed), facets and
+  enumerations with their documentation, identity constraints, where used,
+  the source file and line, and the XSD of the component with linked names.
+- **Element pages** (global and local): type, substitution group head and
+  members, nillable, abstract, default or fixed, where used.
+- **Simple type pages**: restriction facets, enumeration table, list item and
+  union member types.
+- **Class diagrams** (laid out with ELK, drawn as SVG): a type with its
+  attributes and simple-typed children, generalisation arrows for extension
+  and restriction, composition arrows with multiplicities for complex-typed
+  child elements, «enumeration» boxes, the types and elements that use it.
+  Double-click to add neighbours; depth, direction, full screen, export to
+  SVG, PNG, PlantUML and Mermaid.
+- **Content-model trees** in the style of XML editors, expanded on demand.
+- **Overview map** of the complex types of a namespace or a folder of files.
+- **Share links** that restore the page, the diagram's options, added boxes,
+  open tree nodes and zoom; light and dark themes; a short manual (Help).
+
+![The content tree of a NeTEx type](docs/screenshot-tree.png)
+
+![The overview map of the NeTEx IFOPT part](docs/screenshot-overview.png)
+
+## Running it locally
+
+```sh
+schema-explorer serve path/to/schemas/            # every .xsd file in the folder
+schema-explorer serve main.xsd --bind 0.0.0.0:8080 --no-open
+```
+
+`serve` indexes the files once, opens the embedded viewer on them and serves
+their source for the XSD view. Without files, the viewer opens empty and
+indexes what you drop on it.
+
+Planned: comparing two versions of a schema set, JSON Schema, a Docker image
+and the `<schema-explorer>` web component on npm (`@matdata/schema-explorer`).
 
 ## Indexing a schema set
 
@@ -47,6 +87,14 @@ can recompute. In the browser, the WebAssembly build exposes
 - `crates/cli`: the `schema-explorer` command-line tool, with the viewer embedded
 - `crates/wasm`: the core compiled to WebAssembly for the browser
 - `web/`: the TypeScript/Vite viewer
+
+## Publishing a schema set
+
+`scripts/build-examples.sh <cli> <dist>` shows how the website is built: it
+pre-indexes a schema set into `bundle.json` and puts its `.xsd` files next
+to it (for the source view). Any static host works:
+`index.html?bundle=examples/netex/bundle.json&sources=examples/netex/xsd/`.
+Only publish schemas whose licence allows it.
 
 ## Development
 
