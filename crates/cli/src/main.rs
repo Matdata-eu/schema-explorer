@@ -1,7 +1,7 @@
 //! Command-line tool of schema-explorer: serves the viewer with local schemas
 //! and pre-indexes schema sets into bundles for static hosting.
-//!
-//! Early development: the commands are stubs.
+
+mod serve;
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -10,12 +10,12 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use include_dir::{Dir, include_dir};
 use schema_explorer_core::bundle::Level;
-use schema_explorer_core::{Options, Source};
+use schema_explorer_core::{Bundle, Options, Source};
 
 /// The web viewer, embedded at build time (see build.rs).
-static WEB: Dir<'static> = include_dir!("$OUT_DIR/web");
+pub(crate) static WEB: Dir<'static> = include_dir!("$OUT_DIR/web");
 /// The third-party notices, embedded at build time.
-static NOTICES: &str = include_str!(concat!(env!("OUT_DIR"), "/THIRD_PARTY_NOTICES.md"));
+pub(crate) static NOTICES: &str = include_str!(concat!(env!("OUT_DIR"), "/THIRD_PARTY_NOTICES.md"));
 
 #[derive(Parser)]
 #[command(name = "schema-explorer", version, about)]
@@ -30,8 +30,12 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Serve the viewer with the given schema files.
+    ///
+    /// The schemas are indexed once at start; the viewer opens on them and
+    /// shows their source. Without files, the viewer opens empty and indexes
+    /// what is dropped on it in the browser.
     Serve {
-        /// Schema files or directories.
+        /// Schema files or directories (every .xsd file in them).
         files: Vec<PathBuf>,
         /// Address to listen on.
         #[arg(long, env = "SCHEMA_EXPLORER_BIND", default_value = "127.0.0.1:8080")]
@@ -72,13 +76,7 @@ fn main() -> Result<()> {
             files,
             bind,
             no_open,
-        }) => {
-            let _ = (files, no_open);
-            bail!(
-                "serve is not implemented yet (would listen on {bind}; viewer has {} embedded entries)",
-                WEB.entries().len()
-            )
-        }
+        }) => serve::run(&files, &bind, no_open),
         Some(Command::Index {
             files,
             output,
@@ -113,8 +111,8 @@ fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn index(inputs: &[PathBuf], output: &Path, compact: bool, pretty: bool) -> Result<()> {
-    let start = Instant::now();
+/// Read and index the schema files; also returns every file read from disk.
+pub(crate) fn build(inputs: &[PathBuf], compact: bool) -> Result<(Bundle, Vec<PathBuf>)> {
     let mut paths = Vec::new();
     for p in inputs {
         collect(p, &mut paths)?;
@@ -126,23 +124,25 @@ fn index(inputs: &[PathBuf], output: &Path, compact: bool, pretty: bool) -> Resu
             Ok(Source::new(p.to_string_lossy(), bytes))
         })
         .collect::<Result<Vec<_>>>()?;
+    let mut read = paths.clone();
     let mut resolver = |path: &str| -> Option<Vec<u8>> {
         if path.contains("://") {
             return None;
         }
-        std::fs::read(path).ok()
+        let bytes = std::fs::read(path).ok()?;
+        read.push(PathBuf::from(path));
+        Some(bytes)
     };
     let opts = Options {
         generator: format!("schema-explorer {}", env!("CARGO_PKG_VERSION")),
         compact,
     };
     let bundle = schema_explorer_core::index(sources, Some(&mut resolver), &opts);
-    let json = if pretty {
-        schema_explorer_core::to_json_pretty(&bundle)?
-    } else {
-        schema_explorer_core::to_json(&bundle)?
-    };
-    std::fs::write(output, &json).with_context(|| format!("writing {}", output.display()))?;
+    Ok((bundle, read))
+}
+
+/// Print the warnings and errors of a bundle.
+pub(crate) fn report(bundle: &Bundle) {
     for d in &bundle.diagnostics {
         if d.level == Level::Info {
             continue;
@@ -155,6 +155,18 @@ fn index(inputs: &[PathBuf], output: &Path, compact: bool, pretty: bool) -> Resu
             d.level, d.line, d.message, d.code
         );
     }
+}
+
+fn index(inputs: &[PathBuf], output: &Path, compact: bool, pretty: bool) -> Result<()> {
+    let start = Instant::now();
+    let (bundle, _) = build(inputs, compact)?;
+    let json = if pretty {
+        schema_explorer_core::to_json_pretty(&bundle)?
+    } else {
+        schema_explorer_core::to_json(&bundle)?
+    };
+    std::fs::write(output, &json).with_context(|| format!("writing {}", output.display()))?;
+    report(&bundle);
     let s = &bundle.stats;
     eprintln!(
         "{} files, {} global and {} local components, {} unresolved imports, {} unresolved references; wrote {} ({} KB) in {:.2?}",
