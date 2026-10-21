@@ -41,3 +41,9 @@ they are not part of this repository or the binary:
   with <https://www.w3.org/2001/xml.xsd>. Copyright © World Wide Web
   Consortium. Used under the
   [W3C Document License](https://www.w3.org/copyright/document-license-2023/).
+- **OSDM**, the UIC Open Sales and Distribution Model specification (OpenAPI
+  and JSON schemas), from
+  <https://github.com/UnionInternationalCheminsdeFer/OSDM>, Apache-2.0.
+- **JSON Schema 2020-12** meta-schemas, <https://json-schema.org/draft/2020-12>.
+  Copyright © 2022 JSON Schema Specification Authors. BSD-3-Clause
+  (<https://github.com/json-schema-org/json-schema-spec>).
