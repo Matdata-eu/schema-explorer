@@ -7,12 +7,17 @@ name: Pages
 # from their publishers and pre-indexed here (see scripts/build-examples.sh). railML and other non-redistributable schemas are
 # never published.
 
+# Deployed only for releases, so the site always matches a released version
+# (the version is set from the release tag during the build). The
+# github-pages environment must allow deployments from tags matching v*.
 on:
-  push:
-    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy (empty for the latest release)
+        required: false
 
 permissions:
   contents: read
@@ -27,7 +32,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Pick the release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+      - name: Use the release version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: scripts/set-version.sh "${TAG#v}"
       - uses: ./.github/actions/build-web
       - name: Cache the example downloads
         uses: actions/cache@v6
