@@ -63,6 +63,44 @@ enum Command {
         #[arg(long)]
         pretty: bool,
     },
+    /// Compare two versions of a schema set.
+    ///
+    /// Each side is a schema file, a directory (every .xsd file in it) or a
+    /// bundle made with `index`; join several paths for one side with
+    /// commas. Components are matched by qualified name, and by kind and
+    /// local name when the target namespace changed between the versions.
+    Diff {
+        /// The earlier version.
+        old: String,
+        /// The later version.
+        new: String,
+        /// Output file (default: standard output).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Report format: json (the diff model), md (release notes) or html.
+        #[arg(long, value_enum, default_value_t = Format::Json)]
+        format: Format,
+        /// Match components only by qualified name (no fallback to local
+        /// names when the namespace changed).
+        #[arg(long)]
+        strict_namespaces: bool,
+        /// Leave out documentation changes.
+        #[arg(long)]
+        no_docs: bool,
+        /// Titles of the two versions in reports (default: from the schemas' version attributes).
+        #[arg(long, num_args = 2, value_names = ["OLD", "NEW"])]
+        titles: Option<Vec<String>>,
+        /// Exit with status 2 when there are breaking changes.
+        #[arg(long)]
+        fail_on_breaking: bool,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum Format {
+    Json,
+    Md,
+    Html,
 }
 
 fn main() -> Result<()> {
@@ -83,6 +121,27 @@ fn main() -> Result<()> {
             compact,
             pretty,
         }) => index(&files, &output, compact, pretty),
+        Some(Command::Diff {
+            old,
+            new,
+            output,
+            format,
+            strict_namespaces,
+            no_docs,
+            titles,
+            fail_on_breaking,
+        }) => {
+            let opts = schema_explorer_core::DiffOptions {
+                match_local_names: !strict_namespaces,
+                docs: !no_docs,
+                ..Default::default()
+            };
+            let breaking = diff(&old, &new, output.as_deref(), format, &opts, titles)?;
+            if fail_on_breaking && breaking {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
         None => {
             println!("schema-explorer {}", schema_explorer_core::version());
             Ok(())
@@ -180,4 +239,70 @@ fn index(inputs: &[PathBuf], output: &Path, compact: bool, pretty: bool) -> Resu
         start.elapsed()
     );
     Ok(())
+}
+
+/// Load one side of a comparison: a bundle (.json) or schema paths.
+fn load_side(spec: &str) -> Result<Bundle> {
+    let paths: Vec<PathBuf> = spec
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .collect();
+    if let [p] = paths.as_slice()
+        && p.is_file()
+        && p.extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("json"))
+    {
+        let text =
+            std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
+        let mut b: Bundle = serde_json::from_str(&text)
+            .with_context(|| format!("{} is not a schema-explorer bundle", p.display()))?;
+        schema_explorer_core::expand(&mut b);
+        return Ok(b);
+    }
+    let (b, _) = build(&paths, false)?;
+    report(&b);
+    Ok(b)
+}
+
+/// Compare two schema sets; true when there are breaking changes.
+fn diff(
+    old: &str,
+    new: &str,
+    output: Option<&Path>,
+    format: Format,
+    opts: &schema_explorer_core::DiffOptions,
+    titles: Option<Vec<String>>,
+) -> Result<bool> {
+    let start = Instant::now();
+    let a = load_side(old)?;
+    let b = load_side(new)?;
+    let mut d = schema_explorer_core::diff(&a, &b, opts);
+    d.generator = format!("schema-explorer {}", env!("CARGO_PKG_VERSION"));
+    if let Some(t) = titles {
+        d.old.title = t.first().cloned();
+        d.new.title = t.get(1).cloned();
+    }
+    let text = match format {
+        Format::Json => serde_json::to_string_pretty(&d)?,
+        Format::Md => schema_explorer_core::report::markdown(&d),
+        Format::Html => schema_explorer_core::report::html(&d),
+    };
+    match output {
+        Some(p) => std::fs::write(p, &text).with_context(|| format!("writing {}", p.display()))?,
+        None => println!("{text}"),
+    }
+    let t = &d.summary.total;
+    eprintln!(
+        "{} added, {} removed, {} changed ({} breaking, {} documentation only), {} possibly renamed; {} breaking changes in all, in {:.2?}",
+        t.added,
+        t.removed,
+        t.changed,
+        t.breaking,
+        t.docs_only,
+        d.summary.possibly_renamed,
+        d.summary.breaking_changes,
+        start.elapsed()
+    );
+    Ok(t.breaking > 0)
 }

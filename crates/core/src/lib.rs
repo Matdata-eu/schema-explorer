@@ -9,11 +9,14 @@
 //! [diagnostics](bundle::Diagnostic) in the [`Bundle`]; indexing never fails.
 
 pub mod bundle;
+pub mod diff;
 pub mod index;
 pub mod input;
+pub mod report;
 mod xsd;
 
 pub use bundle::{Bundle, FORMAT, Id, Kind};
+pub use diff::{DiffOptions, SchemaDiff, diff};
 pub use input::{Resolver, Source};
 
 /// Indexing options.

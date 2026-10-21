@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:test:shop:1"
+  targetNamespace="urn:test:shop:1" elementFormDefault="qualified" version="1.0">
+  <xs:include schemaLocation="common.xsd"/>
+
+  <xs:element name="order" type="s:Order"/>
+  <xs:element name="item" type="s:Item" abstract="true"/>
+  <xs:element name="book" type="s:Item" substitutionGroup="s:item"/>
+  <xs:element name="cd" type="s:Item" substitutionGroup="s:item"/>
+  <xs:element name="legacy" type="xs:string"/>
+
+  <xs:complexType name="Order">
+    <xs:annotation><xs:documentation>An order.</xs:documentation></xs:annotation>
+    <xs:sequence>
+      <xs:element name="customer" type="s:Customer"/>
+      <xs:element name="note" type="xs:string" minOccurs="0"/>
+      <xs:element name="lines" minOccurs="0">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element ref="s:item" maxOccurs="unbounded"/>
+          </xs:sequence>
+          <xs:attribute name="count" type="xs:int"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="total" type="s:tAmount"/>
+      <xs:element name="channel" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:ID" use="required"/>
+    <xs:attribute name="status" type="s:tStatus" default="open"/>
+    <xs:attribute name="legacyCode" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="Customer">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="email" type="xs:string"/>
+      <xs:element name="phone" type="xs:string" minOccurs="0" maxOccurs="3"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="Item">
+    <xs:sequence>
+      <xs:element name="title" type="xs:string"/>
+      <xs:element name="price" type="s:tAmount"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="Address">
+    <xs:sequence>
+      <xs:element name="street" type="xs:string"/>
+      <xs:element name="city" type="xs:string"/>
+      <xs:element name="zip" type="xs:string"/>
+      <xs:element name="country" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:simpleType name="tStatus">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="open"/>
+      <xs:enumeration value="paid"/>
+      <xs:enumeration value="cancelled"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="tCode">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="10"/>
+      <xs:pattern value="[A-Z]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
