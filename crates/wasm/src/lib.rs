@@ -44,6 +44,38 @@ pub fn expand(json: &str) -> Result<String, JsValue> {
     schema_explorer_core::to_json(&bundle).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+fn err(e: impl ToString) -> JsValue {
+    JsValue::from_str(&e.to_string())
+}
+
+/// Compare two bundles (JSON, full or compact; `old` is the earlier
+/// version) and return the diff as JSON. `options` is a JSON object of
+/// `DiffOptions` fields, or empty for the defaults.
+#[wasm_bindgen]
+pub fn diff(old: &str, new: &str, options: &str) -> Result<String, JsValue> {
+    let a: schema_explorer_core::Bundle = serde_json::from_str(old).map_err(err)?;
+    let b: schema_explorer_core::Bundle = serde_json::from_str(new).map_err(err)?;
+    let opts: schema_explorer_core::DiffOptions = if options.trim().is_empty() {
+        Default::default()
+    } else {
+        serde_json::from_str(options).map_err(err)?
+    };
+    let mut d = schema_explorer_core::diff(&a, &b, &opts);
+    d.generator = format!("schema-explorer-wasm {}", env!("CARGO_PKG_VERSION"));
+    serde_json::to_string(&d).map_err(err)
+}
+
+/// Render a diff (JSON) as a report: `md` or `html`.
+#[wasm_bindgen]
+pub fn diff_report(diff: &str, format: &str) -> Result<String, JsValue> {
+    let d: schema_explorer_core::SchemaDiff = serde_json::from_str(diff).map_err(err)?;
+    match format {
+        "md" => Ok(schema_explorer_core::report::markdown(&d)),
+        "html" => Ok(schema_explorer_core::report::html(&d)),
+        _ => Err(err(format!("unknown report format {format}"))),
+    }
+}
+
 /// The version of the core library.
 #[wasm_bindgen]
 pub fn version() -> String {

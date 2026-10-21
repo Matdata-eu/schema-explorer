@@ -269,3 +269,100 @@ fn tap_b5_b10() {
         at_least(&r.bundle, 10, 10, 1);
     }
 }
+
+// ---- version comparison -------------------------------------------------
+
+use schema_explorer_core::diff::{ComponentDiff, DiffOptions, SchemaDiff, Status, diff};
+
+fn compare(label: &str, old: &[&str], new: &[&str]) -> Option<SchemaDiff> {
+    let a = run(&format!("{label} (old)"), old)?;
+    let b = run(&format!("{label} (new)"), new)?;
+    let start = Instant::now();
+    let d = diff(&a.bundle, &b.bundle, &DiffOptions::default());
+    let t = &d.summary.total;
+    eprintln!(
+        "{label}: {} added, {} removed, {} changed ({} breaking, {} documentation only), {} possibly renamed, {} breaking changes; compared in {:.2?}",
+        t.added,
+        t.removed,
+        t.changed,
+        t.breaking,
+        t.docs_only,
+        d.summary.possibly_renamed,
+        d.summary.breaking_changes,
+        start.elapsed()
+    );
+    Some(d)
+}
+
+fn find<'a>(d: &'a SchemaDiff, kind: Kind, name: &str) -> Option<&'a ComponentDiff> {
+    d.components
+        .iter()
+        .find(|c| c.kind == kind && c.name == name)
+}
+
+fn railml_dirs(v: &str) -> [String; 2] {
+    [
+        format!("railml/{v}/schema"),
+        format!("railml/{v}/codelists"),
+    ]
+}
+
+#[test]
+fn diff_railml_3_1_to_3_2() {
+    let [a, _] = railml_dirs("3.1");
+    let [b, c] = railml_dirs("3.2");
+    let Some(d) = compare("railML 3.1 → 3.2", &[&a], &[&b, &c]) else {
+        return;
+    };
+    assert_eq!(
+        d.namespace_map
+            .get("https://www.railml.org/schemas/3.1")
+            .map(String::as_str),
+        Some("https://www.railml.org/schemas/3.2")
+    );
+    // Most components survive the namespace change.
+    assert!(d.summary.total.changed > 100);
+    assert!(d.summary.total.removed < d.old.components / 4);
+}
+
+#[test]
+fn diff_railml_3_2_to_3_3() {
+    let [a, b] = railml_dirs("3.2");
+    let [c, e] = railml_dirs("3.3");
+    let Some(d) = compare("railML 3.2 → 3.3", &[&a, &b], &[&c, &e]) else {
+        return;
+    };
+    assert_eq!(
+        d.namespace_map
+            .get("https://www.railml.org/schemas/3.2")
+            .map(String::as_str),
+        Some("https://www.railml.org/schemas/3.3")
+    );
+    // "tons" became "tonnes".
+    let w = find(&d, Kind::SimpleType, "tWeightTons").expect("tWeightTons");
+    assert_eq!(w.status, Status::Removed);
+    assert_eq!(w.possibly_renamed.as_deref(), Some("rail3:tWeightTonnes"));
+    // Service section facilities moved out of the attribute group.
+    let ss = find(&d, Kind::AttributeGroup, "aServiceSection").expect("aServiceSection");
+    assert!(ss.changes.iter().any(|c| c.subject == "@allowsCleaning"));
+    // Container elements must now hold at least one item.
+    let bal = find(&d, Kind::ComplexType, "Balises").expect("Balises");
+    assert!(bal.breaking());
+    assert!(d.summary.total.added > 100);
+}
+
+#[test]
+fn diff_taf() {
+    let Some(d) = compare(
+        "TAF 3.5.1 → current",
+        &["telematics/taf-v3.5.1/taf_cat_complete_fixed.xsd"],
+        &["telematics/taf/taf_cat_complete_fixed.xsd"],
+    ) else {
+        return;
+    };
+    assert!(d.namespace_map.is_empty());
+    let ri = find(&d, Kind::Element, "RouteInformation").expect("RouteInformation");
+    assert_eq!(ri.status, Status::Removed);
+    let hb = find(&d, Kind::Element, "HandBrake").expect("HandBrake");
+    assert!(hb.breaking());
+}

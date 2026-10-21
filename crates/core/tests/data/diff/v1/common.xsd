@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="tAmount">
+    <xs:annotation><xs:documentation>A sum of money.</xs:documentation></xs:annotation>
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:fractionDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:attributeGroup name="aAudit">
+    <xs:attribute name="created" type="xs:dateTime"/>
+  </xs:attributeGroup>
+  <xs:group name="gContact">
+    <xs:choice>
+      <xs:element name="mail" type="xs:string"/>
+      <xs:element name="fax" type="xs:string"/>
+    </xs:choice>
+  </xs:group>
+</xs:schema>
