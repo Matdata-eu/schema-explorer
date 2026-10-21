@@ -47,7 +47,10 @@ if (!existsSync(resolve(out, "schema_explorer_wasm.js"))) {
 writeFileSync(
   resolve(out, "schema_explorer_wasm.d.ts"),
   `export default function init(input?: { module_or_path?: string | URL | Request | BufferSource | WebAssembly.Module } | string | URL): Promise<unknown>;
+export function index(names: string[], contents: Uint8Array[], compact: boolean): string;
+export function expand(json: string): string;
 export function version(): string;
+export function format(): number;
 `
 );
 console.log("wasm ready in web/src/wasm/");

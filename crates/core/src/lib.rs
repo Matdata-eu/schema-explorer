@@ -114,6 +114,18 @@ pub fn index(sources: Vec<Source>, resolver: Option<&mut Resolver<'_>>, opts: &O
     bundle
 }
 
+/// Restore what [`Bundle::make_compact`] stripped: the effective content
+/// models and the search index. Does nothing to a full bundle.
+pub fn expand(bundle: &mut Bundle) {
+    if !bundle.compact {
+        return;
+    }
+    let mut diagnostics = Vec::new();
+    index::effective(&mut bundle.components, &mut diagnostics);
+    bundle.search = index::search(&bundle.components);
+    bundle.compact = false;
+}
+
 /// Serialize a bundle as JSON (no whitespace).
 pub fn to_json(bundle: &Bundle) -> serde_json::Result<String> {
     serde_json::to_string(bundle)

@@ -400,6 +400,10 @@ fn json_round_trip_and_compact() {
     assert!(cjson.len() < json.len());
     let v: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(v["format"], FORMAT);
+    // Expanding the compact form gives the full bundle back.
+    let mut expanded: Bundle = serde_json::from_str(&cjson).unwrap();
+    schema_explorer_core::expand(&mut expanded);
+    assert_eq!(to_json(&expanded).unwrap(), json);
 }
 
 #[test]
