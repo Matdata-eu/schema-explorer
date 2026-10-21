@@ -82,6 +82,36 @@ bundle. The bundle format is versioned (`format`, see
 can recompute. In the browser, the WebAssembly build exposes
 `index(names, contents, compact)` with the same output.
 
+## Comparing versions
+
+`diff` compares two versions of a schema set: global complex and simple
+types, elements, attributes, groups and attribute groups added, removed or
+changed, down to child elements (added, removed, retyped, cardinality,
+order, compositor structure), attributes (use, type, default, fixed),
+enumeration values, facets, base types, substitution groups and
+documentation. Each change is classified as breaking (documents valid
+against the old version may not be valid against the new one),
+non-breaking or documentation only; removed and added components with
+near-identical content are reported as possibly renamed. Components are
+matched by qualified name and, when the target namespace changed between
+versions (railML 3.2 → 3.3), by kind and local name (`--strict-namespaces`
+turns that off).
+
+```sh
+schema-explorer diff railml-3.2/schema/ railml-3.3/schema/ --format md -o CHANGES.md
+schema-explorer diff old.json new.json -o diff.json           # bundles work too
+schema-explorer diff a.xsd,b.xsd c.xsd,d.xsd --format html -o diff.html --fail-on-breaking
+```
+
+Several paths for one side are joined with commas. The JSON diff format is
+versioned (`format`, see `crates/core/src/diff.rs`). In the viewer, "Compare
+two versions" on the open page takes two schema sets; a link
+`?bundle=<new>&compare=<old>` opens the comparison directly. The overview
+lists the changes with filters, each changed component gets a page with
+both versions side by side, and diagrams and content trees of the later
+version mark what was added (+, green), removed (−, red, struck through)
+and changed (~, amber).
+
 ## Layout
 
 - `crates/core`: Rust library that reads schema sets into an indexed model

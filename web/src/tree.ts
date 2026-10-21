@@ -4,7 +4,32 @@
 // attribute lists. Nodes expand on demand, so deep and recursive models stay cheap.
 import { Diagram, MONO, SANS, measure, type DiagramCallbacks, type NodeAction, type View } from "./diagram";
 import { s } from "./dom";
+import { MARKER, type Compare, type Mark } from "./diff";
 import { isId, occursText, type Id, type Model, type Particle, type Ref } from "./model";
+
+/** Compare mode: the diff whose changes the tree marks. */
+let diffHook: Compare | null = null;
+export function setTreeDiff(c: Compare | null): void {
+  diffHook = c;
+}
+
+const markLine = (d: Mark | undefined, l: string) => (d ? `${MARKER[d]} ${l}` : l);
+
+/** The child elements removed from what `owner` declares, as nodes to show after its content. */
+function removedNodes(owner: Id | undefined, key: string): TNode[] {
+  if (!diffHook || owner === undefined) return [];
+  return diffHook.childMarks(owner).removed.map((r, i) => {
+    const [a, b] = (r.mult ?? "1..1").split("..");
+    return { key: `${key}.x${i}`, kind: "element" as const, label: r.name, min: Number(a) || 0, max: b === "*" ? null : Number(b) || 1, diff: "removed" as const, expandable: false, children: () => [] };
+  });
+}
+
+function withRemoved(n: TNode, owner: Id | undefined): TNode {
+  const extra = removedNodes(owner, n.key);
+  if (!extra.length) return n;
+  const kids = n.children;
+  return { ...n, expandable: true, children: () => [...kids(), ...extra] };
+}
 
 export interface TNode {
   key: string;
@@ -21,6 +46,8 @@ export interface TNode {
   lines?: string[];
   expandable: boolean;
   children: () => TNode[];
+  /** Compare mode: how it differs from the earlier version. */
+  diff?: Mark;
 }
 
 const NAME_FONT = `600 13px ${SANS}`;
@@ -44,14 +71,15 @@ function typeChildren(m: Model, typeId: Ref | undefined, key: string): TNode[] {
     const lines = attrs.map((a) => {
       const name = isId(a.attr) ? m.comp(a.attr).name ?? "" : m.refName(a.attr);
       const t = m.typeName(m.attrType(a.attr));
-      return `@${name}${t ? " : " + t : ""}${a.use === "required" ? "" : " ?"}`;
+      return markLine(diffHook?.childMarks(a.from).attrs.get(name), `@${name}${t ? " : " + t : ""}${a.use === "required" ? "" : " ?"}`);
     });
+    if (diffHook) for (const r of diffHook.childMarks(typeId).removedAttrs) lines.push(markLine("removed", `@${r.name}`));
     out.push({ key: `${key}.@`, kind: "attrs", label: `attributes (${attrs.length})`, lines, min: 1, max: 1, expandable: false, children: () => [] });
   }
   const ct = m.comp(typeId).complexType!;
   const parts = (ct.effective?.content ?? (ct.content ? [typeId] : [])).filter((p) => m.comp(p).complexType?.content);
   if (parts.length === 1) {
-    out.push(particleNode(m, m.comp(parts[0]).complexType!.content!, `${key}.0`, parts[0] !== typeId ? `from ${m.label(parts[0])}` : undefined));
+    out.push(withRemoved(particleNode(m, m.comp(parts[0]).complexType!.content!, `${key}.0`, parts[0] !== typeId ? `from ${m.label(parts[0])}` : undefined, parts[0]), parts[0]));
   } else if (parts.length > 1) {
     // Extension: the base content, then what each derived type adds, in a sequence.
     out.push({
@@ -61,30 +89,32 @@ function typeChildren(m: Model, typeId: Ref | undefined, key: string): TNode[] {
       min: 1,
       max: 1,
       expandable: true,
-      children: () => parts.map((p, i) => particleNode(m, m.comp(p).complexType!.content!, `${key}.0.${i}`, `from ${m.label(p)}`)),
+      children: () => parts.map((p, i) => withRemoved(particleNode(m, m.comp(p).complexType!.content!, `${key}.0.${i}`, `from ${m.label(p)}`, p), p)),
     });
   }
   return out;
 }
 
-export function particleNode(m: Model, p: Particle, key: string, note?: string): TNode {
+export function particleNode(m: Model, p: Particle, key: string, note?: string, owner?: Id): TNode {
   const o = occ(p);
   switch (p.t) {
     case "element": {
       const id = isId(p.el) ? p.el : undefined;
       const t = id !== undefined ? m.elementType(id) : undefined;
       const complex = m.isComplex(t) && (typeChildren(m, t, key).length > 0);
-      return { key, kind: "element", label: id !== undefined ? m.comp(id).name ?? "" : m.refName(p.el), id, typeName: t !== undefined ? m.typeName(t) : undefined, typeId: isId(t) ? t : undefined, ...o, note, expandable: complex, children: () => typeChildren(m, t, key) };
+      const label = id !== undefined ? m.comp(id).name ?? "" : m.refName(p.el);
+      const diff = diffHook && owner !== undefined ? diffHook.childMarks(owner).children.get(label) : undefined;
+      return { key, kind: "element", label, diff, id, typeName: t !== undefined ? m.typeName(t) : undefined, typeId: isId(t) ? t : undefined, ...o, note, expandable: complex, children: () => typeChildren(m, t, key) };
     }
     case "group": {
       const gid = isId(p.group) ? p.group : undefined;
       const gp = gid !== undefined ? m.comp(gid).group : undefined;
-      return { key, kind: "group", label: m.refName(p.group), id: gid, ...o, note, expandable: !!gp, children: () => (gp ? [particleNode(m, gp, `${key}.0`)] : []) };
+      return { key, kind: "group", label: m.refName(p.group), id: gid, ...o, note, expandable: !!gp, children: () => (gp ? [withRemoved(particleNode(m, gp, `${key}.0`, undefined, gid), gid)] : []) };
     }
     case "any":
       return { key, kind: "any", label: "any", typeName: p.namespace ?? "##any", ...o, note, expandable: false, children: () => [] };
     default:
-      return { key, kind: p.t, label: p.t, ...o, note, expandable: p.items.length > 0, children: () => p.items.map((it, i) => particleNode(m, it, `${key}.${i}`)) };
+      return { key, kind: p.t, label: p.t, ...o, note, expandable: p.items.length > 0, children: () => p.items.map((it, i) => particleNode(m, it, `${key}.${i}`, undefined, owner)) };
   }
 }
 
@@ -93,12 +123,12 @@ export function rootNode(m: Model, id: Id): TNode {
   const c = m.comp(id);
   if (c.kind === "element") {
     const t = m.elementType(id);
-    return { key: "r", kind: "element", label: c.name ?? "", id, typeName: t !== undefined ? m.typeName(t) : undefined, typeId: isId(t) ? t : undefined, min: 1, max: 1, expandable: true, children: () => typeChildren(m, t, "r") };
+    return { key: "r", kind: "element", label: c.name ?? "", diff: diffHook?.mark(id), id, typeName: t !== undefined ? m.typeName(t) : undefined, typeId: isId(t) ? t : undefined, min: 1, max: 1, expandable: true, children: () => typeChildren(m, t, "r") };
   }
   if (c.kind === "group" && c.group) {
-    return { key: "r", kind: "group", label: m.qname(id), id, min: 1, max: 1, expandable: true, children: () => [particleNode(m, c.group!, "r.0")] };
+    return { key: "r", kind: "group", label: m.qname(id), diff: diffHook?.mark(id), id, min: 1, max: 1, expandable: true, children: () => [withRemoved(particleNode(m, c.group!, "r.0", undefined, id), id)] };
   }
-  return { key: "r", kind: "type", label: m.label(id), id, typeId: id, min: 1, max: 1, expandable: true, children: () => typeChildren(m, id, "r") };
+  return { key: "r", kind: "type", label: m.label(id), diff: diffHook?.mark(id), id, typeId: id, min: 1, max: 1, expandable: true, children: () => typeChildren(m, id, "r") };
 }
 
 interface Placed {
@@ -120,9 +150,13 @@ function nodeSize(n: TNode): { w: number; h: number } {
     const w = Math.max(measure(n.label, SMALL_FONT), ...lines.slice(0, 14).map((l) => measure(l, TYPE_FONT))) + 20;
     return { w: Math.min(360, Math.ceil(w)), h: 22 + Math.min(lines.length, 14) * 15 + (lines.length > 14 ? 15 : 0) + 6 };
   }
-  const name = n.kind === "group" ? `group ${n.label}` : n.label;
+  const name = shownName(n);
   const w = Math.max(measure(name, NAME_FONT), n.typeName ? measure(n.typeName, TYPE_FONT) : 0) + 24 + (n.expandable ? 10 : 0);
   return { w: Math.min(340, Math.max(70, Math.ceil(w))), h: n.typeName ? 40 : 28 };
+}
+
+function shownName(n: TNode): string {
+  return markLine(n.diff, n.kind === "group" ? `group ${n.label}` : n.label);
 }
 
 /** Compositors open with their parent; elements and groups when asked. */
@@ -209,7 +243,7 @@ export class TreeView extends Diagram {
     const n = p.n;
     const optional = n.min === 0;
     const many = n.max === null || n.max > 1;
-    const g = s("g", { class: `tn ${n.kind}${optional ? " optional" : ""}`, transform: `translate(${p.x} ${p.y})` });
+    const g = s("g", { class: `tn ${n.kind}${optional ? " optional" : ""}${n.diff ? ` d-${n.diff}` : ""}`, transform: `translate(${p.x} ${p.y})` });
     if (n.note) g.appendChild(s("text", { class: "note", x: 0, y: -7 }, n.note));
     if (n.kind === "sequence" || n.kind === "choice" || n.kind === "all") {
       g.appendChild(s("rect", { class: "comp", width: p.w, height: p.h, rx: 11 }));
@@ -228,13 +262,14 @@ export class TreeView extends Diagram {
       g.appendChild(s("rect", { class: "attrs", width: p.w, height: p.h, rx: 6 }));
       g.appendChild(s("text", { class: "attrs-head", x: 10, y: 12 }, n.label));
       const lines = n.lines ?? [];
-      lines.slice(0, 14).forEach((l, i) => g.appendChild(s("text", { class: "attr-line", x: 10, y: 30 + i * 15 }, l)));
+      const lineCls = (l: string) => (l.startsWith("+ ") ? " d-added" : l.startsWith("− ") ? " d-removed" : l.startsWith("~ ") ? " d-changed" : "");
+      lines.slice(0, 14).forEach((l, i) => g.appendChild(s("text", { class: `attr-line${lineCls(l)}`, x: 10, y: 30 + i * 15 }, l)));
       if (lines.length > 14) g.appendChild(s("text", { class: "attr-line more", x: 10, y: 30 + 14 * 15 }, `+${lines.length - 14} more`));
     } else {
       if (many) g.appendChild(s("rect", { class: "box stack", x: 4, y: 4, width: p.w, height: p.h, rx: 4 }));
       g.appendChild(s("rect", { class: "box", width: p.w, height: p.h, rx: n.kind === "group" ? 10 : 4 }));
       const nameY = n.typeName ? 14 : p.h / 2;
-      g.appendChild(s("text", { class: "tname", x: 10, y: nameY }, n.kind === "group" ? `group ${n.label}` : n.label));
+      g.appendChild(s("text", { class: "tname", x: 10, y: nameY }, shownName(n)));
       if (n.typeName) g.appendChild(s("text", { class: "ttype", x: 10, y: 30 }, n.typeName));
     }
     if (n.min !== 1 || n.max !== 1) g.appendChild(s("text", { class: "occ", x: p.w, y: p.h + 10, "text-anchor": "end" }, occursText(n.min, n.max)));
@@ -301,6 +336,13 @@ export class TreeView extends Diagram {
 .tn text.all{text-anchor:middle}
 .tn .expander circle{fill:${v("--se-panel")};stroke:${v("--se-class")}}
 .tn .expander path{stroke:${v("--se-class")};stroke-width:1.5}
+.tn.d-added rect.box{stroke:${v("--se-add")};stroke-width:2.2;fill:${v("--se-add-bg")}}
+.tn.d-changed rect.box{stroke:${v("--se-chg")};stroke-width:2.2;fill:${v("--se-chg-bg")}}
+.tn.d-removed rect.box{stroke:${v("--se-del")};stroke-dasharray:4 3;fill:${v("--se-del-bg")}}
+.tn.d-removed text.tname{text-decoration:line-through;fill:${v("--se-del")}}
+.tn text.attr-line.d-added{fill:${v("--se-add")}}
+.tn text.attr-line.d-changed{fill:${v("--se-chg")}}
+.tn text.attr-line.d-removed{fill:${v("--se-del")};text-decoration:line-through}
 `;
   }
 }
