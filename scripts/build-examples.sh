@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the examples catalog of the Pages site into <dist>/examples/:
-# a pre-indexed bundle per schema set, its .xsd files (for the source view)
-# and examples.json, which the open page lists.
+# a pre-indexed bundle per schema set, its schema files (for the source
+# view) and examples.json, which the open page lists.
 #
 # Only freely redistributable schema sets go here, each fetched from its
 # publisher at build time (pinned URLs, cached in $WORK/downloads):
@@ -10,6 +10,8 @@
 #     source acknowledged)
 #   - OASIS UBL 2.4 (OASIS IPR Policy)
 #   - W3C XML Schema for schemas (W3C document licence)
+#   - UIC OSDM, OpenAPI with JSON schemas (Apache-2.0), from its public repository
+#   - JSON Schema 2020-12 meta-schemas (BSD-3-Clause)
 # Never add railML (CC BY-NC-ND) or other schemas whose licence forbids
 # redistribution. An example whose download fails is left out with a warning.
 #
@@ -29,11 +31,11 @@ fetch() {
   curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors -o "$DL/$2.part" "$1" && mv "$DL/$2.part" "$DL/$2"
 }
 
-# entry <id> <title> <description> <version> <publisher> <licence> <link> [focus]
+# entry <id> <title> <description> <version> <publisher> <licence> <link> [focus] [sources dir]
 entry() {
   local focus=""
   [ -n "${8:-}" ] && focus=$(printf ',\n    "focus": "%s"' "$8")
-  ENTRIES+=("$(printf '  {\n    "id": "%s",\n    "title": "%s",\n    "description": "%s",\n    "version": "%s",\n    "publisher": "%s",\n    "licence": "%s",\n    "link": "%s",\n    "src": "%s/bundle.json",\n    "sources": "%s/xsd/"%s\n  }' "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$1" "$1" "$focus")")
+  ENTRIES+=("$(printf '  {\n    "id": "%s",\n    "title": "%s",\n    "description": "%s",\n    "version": "%s",\n    "publisher": "%s",\n    "licence": "%s",\n    "link": "%s",\n    "src": "%s/bundle.json",\n    "sources": "%s/%s/"%s\n  }' "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$1" "$1" "${9:-xsd}" "$focus")")
 }
 
 # start <id>: a fresh output directory for an example.
@@ -115,6 +117,43 @@ TXT
   entry xmlschema "XML Schema (schema for schemas)" "The W3C XML Schema 1.0 definition of XSD itself (XMLSchema.xsd), with xml.xsd" "1.0 (2004)" \
     "W3C" "W3C Document License" "https://www.w3.org/TR/xmlschema-1/" "ct/xs:complexType"
 else echo "warning: W3C XMLSchema.xsd not downloaded, example left out" >&2; fi
+
+# UIC OSDM (Open Sales and Distribution Model): the OpenAPI 3.0 document of
+# the online API and the YAML files with its JSON schemas.
+if [ -d "$WORK/OSDM/.git" ] || git clone --depth 1 https://github.com/UnionInternationalCheminsdeFer/OSDM "$WORK/OSDM"; then
+  SPEC="$WORK/OSDM/specification"
+  OSDM_VERSION=$(sed -n 's/^  version: *//p' "$SPEC/OSDM-online-api.yml" | head -n 1)
+  start osdm
+  rmdir "$OUT/xsd"
+  mkdir -p "$OUT/schema"
+  cp -r "$SPEC/OSDM-online-api.yml" "$SPEC/schemas" "$SPEC/components" "$SPEC/paths" "$OUT/schema/"
+  cp "$WORK/OSDM/LICENSE" "$OUT/LICENSE"
+  "$CLI" index "$OUT/schema/OSDM-online-api.yml" -o "$OUT/bundle.json"
+  entry osdm "OSDM" "UIC Open Sales and Distribution Model: the OpenAPI 3.0 specification of the online API and its JSON schemas (OSDM-online-api.yml)" "${OSDM_VERSION:-latest}" \
+    "UIC · OSDM working group" "Apache-2.0" "https://github.com/UnionInternationalCheminsdeFer/OSDM" "ct/Offer" schema
+else echo "warning: OSDM not cloned, example left out" >&2; fi
+
+# JSON Schema 2020-12: the meta-schema and its vocabulary meta-schemas.
+JS=https://json-schema.org/draft/2020-12
+META="core applicator unevaluated validation meta-data format-annotation content"
+ok=1
+fetch $JS/schema jsonschema-2020-12-schema.json || ok=0
+for v in $META; do fetch "$JS/meta/$v" "jsonschema-2020-12-meta-$v.json" || ok=0; done
+if [ "$ok" = 1 ]; then
+  start jsonschema
+  rmdir "$OUT/xsd"
+  mkdir -p "$OUT/schema/meta"
+  cp "$DL/jsonschema-2020-12-schema.json" "$OUT/schema/schema.json"
+  for v in $META; do cp "$DL/jsonschema-2020-12-meta-$v.json" "$OUT/schema/meta/$v.json"; done
+  if fetch https://raw.githubusercontent.com/json-schema-org/json-schema-spec/main/LICENSE jsonschema-LICENSE; then
+    cp "$DL/jsonschema-LICENSE" "$OUT/LICENSE"
+  else
+    echo "Copyright (c) 2022 JSON Schema Specification Authors. BSD-3-Clause, https://github.com/json-schema-org/json-schema-spec" > "$OUT/LICENSE"
+  fi
+  "$CLI" index "$OUT/schema" -o "$OUT/bundle.json"
+  entry jsonschema "JSON Schema 2020-12 (meta-schemas)" "The JSON Schema 2020-12 meta-schema that describes JSON Schema itself, with its vocabulary meta-schemas (core, applicator, validation, ...)" "2020-12" \
+    "JSON Schema Specification Authors" "BSD-3-Clause" "https://json-schema.org/draft/2020-12" "ct/schema" schema
+else echo "warning: JSON Schema meta-schemas not downloaded, example left out" >&2; fi
 
 {
   echo "["
