@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:test:broken">
+  <xs:import namespace="urn:test:nowhere" schemaLocation="nowhere.xsd"/>
+  <xs:include schemaLocation="../missing/included.xsd"/>
+  <xs:complexType name="Loop">
+    <xs:complexContent>
+      <xs:extension base="b:Loop" xmlns:b="urn:test:broken"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="Dup" type="xs:string"/>
+  <xs:element name="Dup" type="xs:int"/>
+</xs:schema>

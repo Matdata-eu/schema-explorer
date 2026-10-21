@@ -11,3 +11,6 @@ keywords = ["xsd", "xml-schema", "json-schema", "schema", "uml"]
 categories = ["parser-implementations", "visualization"]
 
 [dependencies]
+roxmltree = "0.21.1"
+serde.workspace = true
+serde_json.workspace = true
