@@ -1,0 +1,72 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    name: Build image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the release version
+        if: github.event_name == 'release'
+        run: |
+          V=${GITHUB_REF#refs/tags/v}
+          sed -i -E "s/^version = \"[^\"]+\"/version = \"$V\"/" Cargo.toml
+          sed -i -E "s/(schema-explorer-core = \{ path = \"[^\"]+\", version = \")[^\"]+\"/\1$V\"/" Cargo.toml crates/wasm/Cargo.toml
+          # Keep Cargo.lock in step, or the --locked build in the Dockerfile fails.
+          for c in schema-explorer schema-explorer-core schema-explorer-wasm; do
+            sed -i "/^name = \"$c\"$/{n;s/^version = \".*\"/version = \"$V\"/}" Cargo.lock
+          done
+
+      # Releases also get an arm64 image. Emulating arm64 is slow, so pull
+      # requests and main build amd64 only.
+      - name: Set up QEMU
+        if: github.event_name == 'release'
+        uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=edge,branch=main
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,7 @@
+target
+web/node_modules
+web/dist
+web/dist-lib
+web/src/wasm
+tests/fixtures
+.git

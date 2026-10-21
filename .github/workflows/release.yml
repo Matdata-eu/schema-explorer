@@ -1,0 +1,151 @@
+name: Release
+
+# On a published GitHub release tagged vX.Y.Z:
+#  - publishes schema-explorer-core and schema-explorer to crates.io,
+#  - attaches binaries for Linux, macOS and Windows to the release,
+#  - publishes @matdata/schema-explorer (the web component) to npm.
+# The Docker image is built by docker.yml and the site by pages.yml.
+
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Build the web viewer
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the release version
+        run: scripts/set-version.sh "${GITHUB_REF#refs/tags/v}"
+      - uses: ./.github/actions/build-web
+        with:
+          lib: "true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist-lib
+          path: web/dist-lib
+
+  crates:
+    name: Publish to crates.io
+    needs: web
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # crates.io trusted publishing
+    env:
+      HAS_CARGO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Use the release version
+        run: scripts/set-version.sh "${GITHUB_REF#refs/tags/v}"
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: crates/cli/web-dist
+      - name: Put the notices in the crate
+        run: cp THIRD_PARTY_NOTICES.md crates/cli/
+      - name: Test
+        run: cargo test --workspace
+      - name: Authenticate with crates.io (trusted publishing)
+        id: auth
+        if: env.HAS_CARGO_TOKEN != 'true'
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish
+        run: cargo publish -p schema-explorer-core -p schema-explorer --allow-dirty
+        env:
+          # A CARGO_REGISTRY_TOKEN secret is only needed for the very first release,
+          # before trusted publishing can be set up on crates.io.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+
+  binaries:
+    name: Binary ${{ matrix.target }}
+    needs: web
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, archive: tar.gz }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, archive: tar.gz }
+          - { target: x86_64-apple-darwin, os: macos-latest, archive: tar.gz }
+          - { target: aarch64-apple-darwin, os: macos-latest, archive: tar.gz }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, archive: zip }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Use the release version
+        shell: bash
+        run: |
+          V=${GITHUB_REF#refs/tags/v}
+          sed -i.bak -E "s/^version = \"[^\"]+\"/version = \"$V\"/" Cargo.toml
+          sed -i.bak -E "s/(schema-explorer-core = \{ path = \"[^\"]+\", version = \")[^\"]+\"/\1$V\"/" Cargo.toml crates/wasm/Cargo.toml
+          rm -f Cargo.toml.bak crates/wasm/Cargo.toml.bak
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - name: Build
+        run: cargo build --release -p schema-explorer --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          NAME="schema-explorer-${GITHUB_REF#refs/tags/}-${{ matrix.target }}"
+          mkdir "$NAME"
+          EXE=schema-explorer; [ "${{ matrix.archive }}" = zip ] && EXE=schema-explorer.exe
+          cp "target/${{ matrix.target }}/release/$EXE" README.md LICENSE THIRD_PARTY_NOTICES.md "$NAME/"
+          if [ "${{ matrix.archive }}" = zip ]; then 7z a "$NAME.zip" "$NAME" >/dev/null; echo "ASSET=$NAME.zip" >> "$GITHUB_ENV"
+          else tar czf "$NAME.tar.gz" "$NAME"; echo "ASSET=$NAME.tar.gz" >> "$GITHUB_ENV"; fi
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET }}
+
+  npm:
+    name: Publish to npm
+    needs: web
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Trusted publishing needs npm 11.5 or later
+        run: npm install -g npm@latest
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist-lib
+          path: web/dist-lib
+      - name: Use the release version
+        working-directory: web
+        run: npm version "${GITHUB_REF#refs/tags/v}" --no-git-tag-version --allow-same-version
+      - name: Publish
+        working-directory: web
+        run: |
+          cp ../README.md ../LICENSE ../THIRD_PARTY_NOTICES.md .
+          npm publish --access public --provenance
+        env:
+          # Only needed until trusted publishing is configured for the package on npmjs.com.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

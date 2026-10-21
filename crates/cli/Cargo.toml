@@ -1,0 +1,25 @@
+[package]
+name = "schema-explorer"
+description = "Visual explorer for XML Schema (XSD) and, later, JSON Schema: UML-like diagrams, content-model trees and a readable page per type, in a browser"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["xsd", "xml-schema", "json-schema", "schema", "uml"]
+categories = ["command-line-utilities", "visualization"]
+default-run = "schema-explorer"
+# web-dist/ and THIRD_PARTY_NOTICES.md are copied in by the release workflow before publishing.
+include = ["src/**", "build.rs", "web-dist/**", "THIRD_PARTY_NOTICES.md"]
+
+[[bin]]
+name = "schema-explorer"
+path = "src/main.rs"
+
+[dependencies]
+schema-explorer-core.workspace = true
+anyhow.workspace = true
+clap = { version = "4", features = ["derive", "env"] }
+include_dir = "0.7"

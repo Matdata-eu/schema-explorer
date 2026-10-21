@@ -1,0 +1,38 @@
+{{!-- Template for cargo-about. Regenerate THIRD_PARTY_NOTICES.md with:
+       cargo about generate about.hbs -o THIRD_PARTY_NOTICES.md --}}
+# Third-party notices
+
+schema-explorer is © 2026 Mathias Vanden Auweele ([MatData](https://matdata.eu/)),
+licensed under the [Apache License 2.0](LICENSE). Source code, questions, bug
+reports and feature requests: <https://github.com/Matdata-eu/schema-explorer/issues>.
+
+The schema-explorer binary, the web viewer and the `@matdata/schema-explorer`
+npm package include the third-party software listed below. Their license terms follow.
+## Data
+
+- Schemas shown on the project website (such as NeTEx, from
+  <https://github.com/NeTEx-CEN/NeTEx>) are fetched at build time under their
+  own licences. They are not part of the schema-explorer software.
+
+## Rust crates
+
+Licenses used by the Rust crates compiled into the binary and the WebAssembly module:
+
+{{#each overview}}
+- {{{name}}} ({{count}})
+{{/each}}
+
+{{#each licenses}}
+### {{{name}}}
+
+Used by:
+
+{{#each used_by}}
+- [{{crate.name}} {{crate.version}}]({{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}})
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

@@ -1,0 +1,52 @@
+publiccodeYmlVersion: '0'
+name: schema-explorer
+url: https://github.com/Matdata-eu/schema-explorer
+landingURL: https://matdata-eu.github.io/schema-explorer/
+softwareVersion: 0.1.0
+releaseDate: '2026-10-21'
+platforms:
+- linux
+- windows
+- mac
+- web
+categories:
+- data-visualization
+- knowledge-management
+developmentStatus: development
+softwareType: standalone/other
+organisation:
+  uri: https://matdata.eu
+  name: MatData
+intendedAudience:
+  scope:
+  - government
+  - science-and-technology
+  - infrastructures
+  - transportation
+description:
+  en:
+    shortDescription: Shows XML Schema (XSD) sets as UML-like diagrams, content-model trees and readable
+      pages, in the browser.
+    longDescription: |
+      Large XML Schema sets, such as the ones used for data exchange in public transport and railways, are hard to read for most people. schema-explorer reads a set of XSD files, follows includes, imports and references across files and namespaces, and shows the result as UML-like diagrams, content-model trees and one readable page per type and element.
+
+      It runs entirely in the browser, can be published on GitHub Pages, embeds in other web applications as a web component, and comes with a command-line tool and Docker image. Support for JSON Schema and for comparing schema versions is planned.
+    documentation: https://github.com/Matdata-eu/schema-explorer#readme
+    features:
+    - UML-like diagrams of XML Schema types and elements
+    - A page per type and element with its content model
+    - Search and cross-file reference following
+    - Version comparison
+    - Runs in the browser; web component for embedding
+legal:
+  license: Apache-2.0
+  mainCopyrightOwner: MatData
+maintenance:
+  type: internal
+  contacts:
+  - name: Mathias Vanden Auweele
+    affiliation: MatData
+localisation:
+  localisationReady: false
+  availableLanguages:
+  - en
