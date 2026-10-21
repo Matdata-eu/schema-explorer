@@ -1,2 +1,3 @@
-// Entry point of the static site and the viewer served by the CLI.
-import "./lib";
+// The standalone app: one <schema-explorer routing> filling the page.
+import { define } from "./element";
+define();

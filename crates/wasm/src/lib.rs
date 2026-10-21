@@ -31,6 +31,19 @@ pub fn index(
     schema_explorer_core::to_json(&bundle).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Expand a compact bundle (JSON) into the full form: effective content
+/// models and the search index are recomputed. A full bundle comes back as is.
+#[wasm_bindgen]
+pub fn expand(json: &str) -> Result<String, JsValue> {
+    let mut bundle: schema_explorer_core::Bundle =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    if !bundle.compact {
+        return Ok(json.to_string());
+    }
+    schema_explorer_core::expand(&mut bundle);
+    schema_explorer_core::to_json(&bundle).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// The version of the core library.
 #[wasm_bindgen]
 pub fn version() -> String {

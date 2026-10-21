@@ -9,3 +9,21 @@ This file is a placeholder during early development. It is regenerated from
 before releases:
 
     cargo about generate about.hbs -o THIRD_PARTY_NOTICES.md
+
+## Web viewer
+
+The web viewer (in the binary, on the website and in the npm package)
+includes:
+
+| Component | Version | Licence | Used for |
+|---|---|---|---|
+| [ELK.js](https://github.com/kieler/elkjs), the JavaScript build of the [Eclipse Layout Kernel](https://eclipse.dev/elk/) | 0.12.0 | EPL-2.0 | the diagram layout worker |
+| [Barlow](https://github.com/jpt/barlow) font, latin subset via [Fontsource](https://fontsource.org) | 5.3.0 | OFL-1.1 | the viewer's text |
+| [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) font, latin subset via [Fontsource](https://fontsource.org) | 5.3.0 | OFL-1.1 | names and code in the viewer |
+
+ELK.js is distributed unmodified; its source code is available at
+<https://github.com/kieler/elkjs> and <https://github.com/eclipse/elk>.
+
+The NeTEx schemas shown as an example on the website are fetched from
+<https://github.com/NeTEx-CEN/NeTEx> at build time and published with their
+licence (GPL-3.0); they are not part of this repository or the binary.
