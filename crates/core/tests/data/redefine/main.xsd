@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:test:r" targetNamespace="urn:test:r">
+  <xs:redefine schemaLocation="base.xsd">
+    <xs:complexType name="Person">
+      <xs:complexContent>
+        <xs:extension base="Person">
+          <xs:sequence><xs:element name="age" type="xs:int"/></xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:element name="person" type="Person"/>
+</xs:schema>

@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:m="urn:test:main" xmlns:o="urn:test:other"
+           targetNamespace="urn:test:main" elementFormDefault="qualified" version="1.2">
+  <xs:annotation><xs:documentation>Main test schema.</xs:documentation></xs:annotation>
+  <xs:include schemaLocation="sub/common.xsd"/>
+  <xs:import namespace="urn:test:other" schemaLocation="sub/../other.xsd"/>
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace" schemaLocation="http://www.w3.org/2001/xml.xsd"/>
+
+  <xs:complexType name="Base" abstract="true">
+    <xs:annotation>
+      <xs:documentation xml:lang="en">The base of everything.</xs:documentation>
+      <xs:documentation xml:lang="fr">La base de tout.</xs:documentation>
+      <xs:appinfo><m:status>stable</m:status></xs:appinfo>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="id" type="xs:ID"/>
+      <xs:element name="note" type="xs:string" minOccurs="0" maxOccurs="unbounded" nillable="true"/>
+    </xs:sequence>
+    <xs:attribute name="version" type="xs:string" default="1"/>
+    <xs:attribute name="obsolete" type="xs:boolean"/>
+    <xs:attributeGroup ref="m:Common"/>
+  </xs:complexType>
+
+  <xs:complexType name="Derived">
+    <xs:complexContent>
+      <xs:extension base="m:Base">
+        <xs:choice>
+          <xs:element ref="m:Shape"/>
+          <xs:group ref="m:Extra" minOccurs="0"/>
+          <xs:any namespace="##other" processContents="lax"/>
+        </xs:choice>
+        <xs:attribute ref="o:flag" use="required"/>
+        <xs:anyAttribute namespace="##other"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="Restricted">
+    <xs:complexContent>
+      <xs:restriction base="m:Derived">
+        <xs:sequence>
+          <xs:element name="id" type="xs:ID"/>
+          <xs:element ref="m:Shape"/>
+        </xs:sequence>
+        <xs:attribute name="obsolete" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="Measure">
+    <xs:simpleContent>
+      <xs:extension base="xs:decimal">
+        <xs:attribute name="unit" type="m:Unit" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:simpleType name="Colour">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="red">
+        <xs:annotation>
+          <xs:documentation xml:lang="en">Red as a rose.</xs:documentation>
+          <xs:documentation xml:lang="nl">Rood.</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="green"/>
+      <xs:enumeration value="blue"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Colours">
+    <xs:list itemType="m:Colour"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="ColourOrCode">
+    <xs:union memberTypes="m:Colour">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:pattern value="#[0-9a-f]{6}"/>
+          <xs:maxLength value="7" fixed="true"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
+
+  <xs:element name="Shape" type="m:Base" abstract="true"/>
+  <xs:element name="Circle" substitutionGroup="m:Shape">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="m:Derived">
+          <xs:sequence>
+            <xs:element name="radius" type="m:Measure"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Square" substitutionGroup="m:Shape" type="m:Derived" final="#all"/>
+  <xs:element name="colour" type="m:Colour" default="red"/>
+  <xs:element name="answer" type="xs:int" fixed="42"/>
+
+  <xs:group name="Extra">
+    <xs:sequence>
+      <xs:element ref="m:colour"/>
+      <xs:element name="tag" type="o:Tag" maxOccurs="5"/>
+    </xs:sequence>
+  </xs:group>
+
+  <xs:element name="Root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="m:Shape" maxOccurs="unbounded"/>
+        <xs:element name="link" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="to" type="xs:IDREF"/>
+            <xs:attribute ref="xml:lang"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="ShapeKey">
+      <xs:selector xpath="m:Circle|m:Square"/>
+      <xs:field xpath="m:id"/>
+    </xs:key>
+    <xs:keyref name="LinkRef" refer="m:ShapeKey">
+      <xs:selector xpath="m:link"/>
+      <xs:field xpath="@to"/>
+    </xs:keyref>
+    <xs:unique name="UniqueColour">
+      <xs:selector xpath=".//m:colour"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+
+  <!-- XSD 1.1 constructs that must be tolerated -->
+  <xs:complexType name="Range">
+    <xs:sequence>
+      <xs:element name="min" type="xs:int"/>
+      <xs:element name="max" type="xs:int"/>
+    </xs:sequence>
+    <xs:assert test="min le max"/>
+  </xs:complexType>
+  <xs:element name="Unknown" type="m:Missing"/>
+</xs:schema>
