@@ -51,6 +51,7 @@ export function index(names: string[], contents: Uint8Array[], compact: boolean)
 export function expand(json: string): string;
 export function diff(old: string, cur: string, options: string): string;
 export function diff_report(diff: string, format: string): string;
+export function json_source(name: string, text: string, pointer: string): string;
 export function version(): string;
 export function format(): number;
 `
