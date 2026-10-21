@@ -5,7 +5,8 @@
 //! repository root) and are skipped when a schema set is absent. Fetch the
 //! public ones with `scripts/fetch-fixtures.sh`; the railML and telematics
 //! sets are expected under `railml/<version>/{schema,codelists}` and
-//! `telematics/{netex,taf,taf-v3.5.1,b5,b10}`.
+//! `telematics/{netex,taf,taf-v3.5.1,b5,b10}`; OSDM (OpenAPI with JSON
+//! Schema) under `OSDM`.
 //!
 //! Run with `--nocapture` (in release mode for meaningful timings) to see
 //! the counts and indexing times.
@@ -365,4 +366,33 @@ fn diff_taf() {
     assert_eq!(ri.status, Status::Removed);
     let hb = find(&d, Kind::Element, "HandBrake").expect("HandBrake");
     assert!(hb.breaking());
+}
+
+/// UIC OSDM: an OpenAPI 3.0 document whose schemas live in YAML files it
+/// refers to (fetched by scripts/fetch-fixtures.sh).
+#[test]
+fn osdm_openapi() {
+    let Some(r) = run(
+        "OSDM (OpenAPI)",
+        &["OSDM/specification/OSDM-online-api.yml"],
+    ) else {
+        return;
+    };
+    let b = &r.bundle;
+    assert_eq!(
+        b.language,
+        schema_explorer_core::bundle::Language::JsonSchema
+    );
+    no_unresolved_imports(b);
+    assert_eq!(b.stats.unresolved_refs, 0);
+    at_least(b, 300, 80, 0);
+    let offer = b.find(Kind::ComplexType, "Offer").expect("Offer");
+    assert!(
+        b.components[offer as usize]
+            .complex_type
+            .as_ref()
+            .unwrap()
+            .content
+            .is_some()
+    );
 }

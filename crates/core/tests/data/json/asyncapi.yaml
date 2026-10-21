@@ -1,0 +1,21 @@
+asyncapi: 2.6.0
+info:
+  title: Train events
+  version: 1.0.0
+channels:
+  train/position:
+    subscribe:
+      message:
+        $ref: '#/components/messages/TrainPosition'
+components:
+  messages:
+    TrainPosition:
+      payload:
+        type: object
+        properties:
+          train: { $ref: '#/components/schemas/TrainId' }
+          lat: { type: number, minimum: -90, maximum: 90 }
+  schemas:
+    TrainId:
+      type: string
+      pattern: '^[0-9]{1,6}$'

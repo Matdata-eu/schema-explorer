@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/order.schema.json",
+  "title": "Order",
+  "description": "A customer order.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Order identifier."
+    },
+    "customer": {
+      "$ref": "customer.yaml"
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LineItem"
+      },
+      "minItems": 1,
+      "maxItems": 50
+    },
+    "status": {
+      "$ref": "#/$defs/Status"
+    },
+    "payment": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CardPayment"
+        },
+        {
+          "$ref": "#/$defs/BankPayment"
+        }
+      ]
+    },
+    "note": {
+      "type": "string",
+      "deprecated": true
+    },
+    "tags": {
+      "$ref": "#tag"
+    },
+    "extra": {
+      "$ref": "#/$defs/Missing"
+    },
+    "currency": {
+      "type": "string",
+      "default": "EUR"
+    }
+  },
+  "required": [
+    "id",
+    "customer",
+    "lines",
+    "status"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "LineItem": {
+      "type": "object",
+      "properties": {
+        "sku": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}-[0-9]+$"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "sku",
+        "quantity"
+      ]
+    },
+    "Status": {
+      "description": "Where the order is.",
+      "type": "string",
+      "enum": [
+        "open",
+        "paid",
+        "refunded"
+      ]
+    },
+    "Payment": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "amount"
+      ]
+    },
+    "CardPayment": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Payment"
+        },
+        {
+          "properties": {
+            "cardNumber": {
+              "type": "string",
+              "minLength": 12
+            }
+          },
+          "required": [
+            "cardNumber"
+          ]
+        }
+      ]
+    },
+    "BankPayment": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Payment"
+        },
+        {
+          "properties": {
+            "iban": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "Tags": {
+      "$anchor": "tag",
+      "type": "object",
+      "patternProperties": {
+        "^x-": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {
+        "type": "integer"
+      }
+    }
+  }
+}
