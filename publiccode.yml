@@ -25,15 +25,16 @@ intendedAudience:
   - transportation
 description:
   en:
-    shortDescription: Shows XML Schema (XSD) sets as UML-like diagrams, content-model trees and readable
+    shortDescription: Shows XML Schema (XSD) and JSON Schema sets as UML-like diagrams, content-model trees and readable
       pages, in the browser.
     longDescription: |
       Large XML Schema sets, such as the ones used for data exchange in public transport and railways, are hard to read for most people. schema-explorer reads a set of XSD files, follows includes, imports and references across files and namespaces, and shows the result as UML-like diagrams, content-model trees and one readable page per type and element.
 
-      It runs entirely in the browser, can be published on GitHub Pages, embeds in other web applications as a web component, and comes with a command-line tool and Docker image. Support for JSON Schema and for comparing schema versions is planned.
+      It runs entirely in the browser, can be published on GitHub Pages, embeds in other web applications as a web component, and comes with a command-line tool and Docker image. It reads XML Schema and JSON Schema (also the schemas of OpenAPI and AsyncAPI documents) and compares schema versions.
     documentation: https://github.com/Matdata-eu/schema-explorer#readme
     features:
-    - UML-like diagrams of XML Schema types and elements
+    - UML-like diagrams of XML Schema and JSON Schema (OpenAPI, AsyncAPI) types
+    - JSON Schema draft-04 to 2020-12, OpenAPI 3.x and AsyncAPI 2/3 input
     - A page per type and element with its content model
     - Search and cross-file reference following
     - Version comparison

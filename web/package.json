@@ -1,7 +1,7 @@
 {
   "name": "@matdata/schema-explorer",
   "version": "0.1.0",
-  "description": "Visual explorer for XML Schema (XSD) and, later, JSON Schema: UML-like diagrams, content-model trees and readable pages. Web app and <schema-explorer> web component.",
+  "description": "Visual explorer for XML Schema (XSD) and JSON Schema (also OpenAPI and AsyncAPI): UML-like diagrams, content-model trees and readable pages. Web app and <schema-explorer> web component.",
   "license": "Apache-2.0",
   "author": "Mathias Vanden Auweele <mathias@matdata.eu>",
   "homepage": "https://github.com/Matdata-eu/schema-explorer",

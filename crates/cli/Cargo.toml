@@ -1,6 +1,6 @@
 [package]
 name = "schema-explorer"
-description = "Visual explorer for XML Schema (XSD) and, later, JSON Schema: UML-like diagrams, content-model trees and a readable page per type, in a browser"
+description = "Visual explorer for XML Schema (XSD) and JSON Schema (also OpenAPI and AsyncAPI): UML-like diagrams, content-model trees and a readable page per type, in a browser"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
