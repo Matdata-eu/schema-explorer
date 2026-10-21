@@ -12,4 +12,9 @@ if [ ! -d "$DIR/NeTEx/.git" ]; then
 else
   git -C "$DIR/NeTEx" pull --ff-only --depth 1
 fi
+if [ ! -d "$DIR/OSDM/.git" ]; then
+  git clone --depth 1 https://github.com/UnionInternationalCheminsdeFer/OSDM "$DIR/OSDM"
+else
+  git -C "$DIR/OSDM" pull --ff-only --depth 1
+fi
 echo "fixtures ready in $DIR"

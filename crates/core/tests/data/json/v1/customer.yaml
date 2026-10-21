@@ -1,0 +1,23 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://example.com/schemas/customer.yaml
+title: Customer
+type: object
+properties:
+  name:
+    type: string
+    maxLength: 80
+  address:
+    $ref: '#/$defs/Address'
+  kind:
+    oneOf:
+      - const: person
+        description: A natural person.
+      - const: company
+        description: A legal entity.
+required: [name]
+$defs:
+  Address:
+    type: object
+    properties:
+      street: { type: string }
+      country: { type: string, pattern: '^[A-Z]{2}$' }
