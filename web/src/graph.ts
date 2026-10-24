@@ -228,8 +228,33 @@ export function buildNeighborhood(m: Model, o: NeighborhoodOptions): GraphSpec {
         }
         const holder = containingType(m, u.by);
         if (holder === undefined || holder === tid) continue;
-        if (addType(holder)) edge({ key: `a${holder}-${u.by}-${tid}`, from: `c${holder}`, to: `c${tid}`, kind: "comp", label: by.name ?? "", id: u.by });
+        if (addType(holder)) {
+          edge({ key: `a${holder}-${u.by}-${tid}`, from: `c${holder}`, to: `c${tid}`, kind: "comp", label: by.name ?? "", id: u.by });
+          nesting(holder);
+        }
       }
+      nesting(tid);
+    }
+  };
+
+  // An anonymous type is used only where it is declared: show the chain of
+  // types it is nested in, up to a named type or a global element.
+  const nesting = (tid: Id) => {
+    const seen = new Set<Id>();
+    for (let t = tid; !m.comp(t).name && !seen.has(t); ) {
+      seen.add(t);
+      const decl = m.comp(t).parent;
+      if (decl === undefined || m.comp(decl).kind !== "element") return;
+      const d = m.comp(decl);
+      if (d.parent === undefined) {
+        if (take(`x${decl}`, () => ({ key: `x${decl}`, id: decl, kind: "element", name: d.name ?? "", stereotype: d.element?.abstract ? "«element, abstract»" : "«element»", attrs: [], hiddenAttrs: 0 }))) edge({ key: `t${decl}-${t}`, from: `x${decl}`, to: `c${t}`, kind: "typed" });
+        return;
+      }
+      const holder = containingType(m, decl);
+      if (holder === undefined || !addType(holder)) return;
+      const row = m.contentRows(holder).find((r) => r.id === decl);
+      edge({ key: `a${holder}-${decl}-${t}`, from: `c${holder}`, to: `c${t}`, kind: "comp", label: d.name ?? "", mult: row ? mult(row.min, row.max) : undefined, id: decl });
+      t = holder;
     }
   };
 
