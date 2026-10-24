@@ -29,8 +29,8 @@ time (see `scripts/build-examples.sh`) and published with their own terms;
 they are not part of this repository or the binary:
 
 - **NeTEx**, from <https://github.com/NeTEx-CEN/NeTEx>, GPL-3.0.
-- **TAF TSI** (technical documents baseline 3.5.0) and **TAP TSI B.10** (1.4)
-  XML schemas. Source: European Union Agency for Railways,
+- **TAF TSI** (4.0, and technical documents baseline 3.5.0), **TAP TSI
+  B.10** (1.4) and legacy **RINF** XML schemas. Source: European Union Agency for Railways,
   <https://www.era.europa.eu>. "Reproduction is authorised, provided the
   source is acknowledged" ([ERA disclaimer and copyright notice](https://www.era.europa.eu/content/disclaimer-and-copyright-notice)).
 - **UBL 2.4**, Universal Business Language Version 2.4, OASIS Standard,
