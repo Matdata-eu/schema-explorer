@@ -3,7 +3,7 @@ name: Pages
 # Publishes the viewer on GitHub Pages:
 # https://matdata-eu.github.io/schema-explorer/
 # with an examples catalog of freely redistributable schemas only: NeTEx,
-# ERA TAF/TAP TSI, OASIS UBL 2.4 and the W3C schema for schemas are fetched
+# ERA TAF/TAP TSI, legacy RINF, OASIS UBL 2.4 and the W3C schema for schemas are fetched
 # from their publishers and pre-indexed here (see scripts/build-examples.sh). railML and other non-redistributable schemas are
 # never published.
 

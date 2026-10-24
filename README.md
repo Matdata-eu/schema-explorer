@@ -184,8 +184,8 @@ to it (for the source view). Any static host works:
 Only publish schemas whose licence allows it.
 
 The website's examples are fetched from their publishers at build time and
-keep their own terms: NeTEx (GPL-3.0, NeTEx-CEN); TAF TSI and TAP TSI B.10
-schemas, source: European Union Agency for Railways (reproduction authorised,
+keep their own terms: NeTEx (GPL-3.0, NeTEx-CEN); TAF TSI, TAP TSI B.10
+and legacy RINF schemas, source: European Union Agency for Railways (reproduction authorised,
 source acknowledged); UBL 2.4, copyright © OASIS Open 2024 (OASIS IPR
 Policy); XMLSchema.xsd and xml.xsd, copyright © W3C (W3C Document License);
 OSDM, UIC (Apache-2.0); JSON Schema 2020-12 meta-schemas, copyright © 2022
