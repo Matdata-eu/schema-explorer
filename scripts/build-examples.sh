@@ -6,8 +6,8 @@
 # Only freely redistributable schema sets go here, each fetched from its
 # publisher at build time (pinned URLs, cached in $WORK/downloads):
 #   - NeTEx (GPL-3.0), from its public repository
-#   - ERA TAF TSI and TAP TSI B.10 schemas (ERA: reproduction authorised,
-#     source acknowledged)
+#   - ERA TAF TSI (4.0 and 3.5.0), TAP TSI B.10 and legacy RINF schemas
+#     (ERA: reproduction authorised, source acknowledged)
 #   - OASIS UBL 2.4 (OASIS IPR Policy)
 #   - W3C XML Schema for schemas (W3C document licence)
 #   - UIC OSDM, OpenAPI with JSON schemas (Apache-2.0), from its public repository
@@ -58,8 +58,22 @@ cp "$WORK/NeTEx/LICENSE" "$OUT/LICENSE"
 entry netex "NeTEx" "Network Timetable Exchange, the CEN standard for public transport data (NeTEx_publication.xsd)" "$NETEX_REV" \
   "CEN TC278 · NeTEx-CEN" "GPL-3.0" "https://github.com/NeTEx-CEN/NeTEx" "ct/netex:StopPlace_VersionStructure"
 
-# ERA TAF TSI, technical documents baseline 3.5.0 (message catalogue XML schema).
 ERA="Source: European Union Agency for Railways (https://www.era.europa.eu). Reproduction is authorised, provided the source is acknowledged."
+
+# ERA TAF TSI 4.0 (message catalogue XML schema), from the ERA telematics TSI repository.
+TAF4=https://gitlab.com/era-europa-eu/public/era-telematics-tsi/tsi_telematics/-/raw/2daa71cfb37b87ee16b5e85352a365fde9a3dc91/TD_105_xsd
+if fetch $TAF4/taf_cat_complete.xsd taf-4.0-taf_cat_complete.xsd &&
+  fetch $TAF4/taf_cat_codelists.xsd taf-4.0-taf_cat_codelists.xsd &&
+  fetch $TAF4/TAP_TSI_codelist.xsd taf-4.0-TAP_TSI_codelist.xsd; then
+  start taf-tsi-4
+  for f in taf_cat_complete taf_cat_codelists TAP_TSI_codelist; do cp "$DL/taf-4.0-$f.xsd" "$OUT/xsd/$f.xsd"; done
+  echo "$ERA" > "$OUT/NOTICE"
+  "$CLI" index "$OUT/xsd/taf_cat_complete.xsd" -o "$OUT/bundle.json"
+  entry taf-tsi-4 "TAF TSI 4.0" "Telematics Applications for Freight: the common message catalogue of the ERA technical documents, version 4.0 (taf_cat_complete.xsd)" "4.0.0" \
+    "European Union Agency for Railways" "ERA, source acknowledged" "https://gitlab.com/era-europa-eu/public/era-telematics-tsi/tsi_telematics"
+else echo "warning: TAF TSI 4.0 schemas not downloaded, example left out" >&2; fi
+
+# ERA TAF TSI, technical documents baseline 3.5.0 (message catalogue XML schema).
 TAF=https://www.era.europa.eu/system/files/2024-06
 if fetch $TAF/taf_cat_complete.xsd taf-3.5.0-taf_cat_complete.xsd &&
   fetch $TAF/taf_cat_codelists_0.xsd taf-3.5.0-taf_cat_codelists.xsd &&
@@ -81,6 +95,22 @@ if fetch https://www.era.europa.eu/system/files/2022-11/tap_tsi_b.10_1.4_1.xsd t
   entry tap-tsi-b10 "TAP TSI B.10" "Telematics Applications for Passenger services: electronic reservation of assistance for persons with reduced mobility (technical document B.10)" "1.4" \
     "European Union Agency for Railways" "ERA, source acknowledged" "https://www.era.europa.eu/era-folder/tap-baseline-142-archive"
 else echo "warning: TAP TSI B.10 schema not downloaded, example left out" >&2; fi
+
+# ERA RINF, the XML schema of the legacy Register of Infrastructure application
+# (the data upload format used before the RINF knowledge graph).
+if fetch "https://www.era.europa.eu/system/files?file=2022-11/rinf_schema_en.xsd" rinf-legacy.xsd &&
+  grep -q 'schema' "$DL/rinf-legacy.xsd"; then
+  start rinf-legacy
+  cp "$DL/rinf-legacy.xsd" "$OUT/xsd/rinf_schema_en.xsd"
+  echo "$ERA" > "$OUT/NOTICE"
+  if "$CLI" index "$OUT/xsd/rinf_schema_en.xsd" -o "$OUT/bundle.json"; then
+    entry rinf-legacy "RINF (legacy)" "Register of Infrastructure: the XML schema of the legacy RINF application, used to upload infrastructure data to ERA (rinf_schema_en.xsd)" "2022" \
+      "European Union Agency for Railways" "ERA, source acknowledged" "https://www.era.europa.eu/domains/registers/rinf_en"
+  else
+    echo "warning: legacy RINF schema could not be indexed, example left out" >&2
+    rm -rf "$OUT"
+  fi
+else echo "warning: legacy RINF schema not downloaded, example left out" >&2; fi
 
 # OASIS UBL 2.4: every document schema of the release (xsd/maindoc) and the common modules.
 if fetch https://docs.oasis-open.org/ubl/os-UBL-2.4/UBL-2.4.zip UBL-2.4.zip; then
