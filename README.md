@@ -72,7 +72,8 @@ own files on it.
   also be seen **side by side**: both versions' own class diagrams (laid out
   together, pan and zoom linked), their content trees lined up row by row,
   and their XSD source with a line and word diff (or unified), plus the full
-  page of either version.
+  page of either version. A **Changes** tab lists every changed component
+  with its source diff, as a pull request lists changed files.
 - **Share links** that restore the page, the diagram's options, added boxes,
   open tree nodes and zoom; light and dark themes; a short manual (Help).
 
@@ -157,7 +158,15 @@ Several paths for one side are joined with commas. The JSON diff format is
 versioned (`format`, see `crates/core/src/diff.rs`). In the viewer, "Compare
 two versions" on the open page takes two schema sets; a link
 `?bundle=<new>&compare=<old>` opens the comparison directly. The overview
-lists the changes with filters. Each changed component gets a page with
+lists the changes with filters. The *Changes* tab (`#/diff/files`) shows
+them the way a pull request shows changed files: a tree of the changed
+components by schema file, and a card per component with its semantic
+changes, notes on the source lines they are about, and the source diff
+(split or unified, with word highlights and folded unchanged lines). Cards
+can be marked as viewed (kept in the browser); filters, layout and the
+current card are kept in the link; `j`/`k` move between cards, `v` marks
+one viewed, `s` switches split and unified, `t` shows the tree and `/`
+filters it. Each changed component gets a page with
 four views (kept in the link as `v=`): *Changes* marks what was added (+,
 green), removed (−, red, struck through) and changed (~, amber) on the
 later version's diagram; *Side by side* shows each version's own diagram or

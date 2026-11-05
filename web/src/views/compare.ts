@@ -23,7 +23,7 @@ function impactBadge(i: Impact): HTMLElement | null {
   return null;
 }
 
-const qnameOf = (c: ComponentDiff) => c.new?.qname ?? c.old?.qname ?? c.name;
+export const qnameOf = (c: ComponentDiff) => c.new?.qname ?? c.old?.qname ?? c.name;
 
 export function diffHref(ctx: AppCtx, c: ComponentDiff): string {
   return ctx.hrefRoute({ view: "diffc", query: `${KIND_SLUG[c.kind]}/${qnameOf(c)}` });
@@ -71,6 +71,20 @@ async function download(cmp: Compare, format: "md" | "html" | "json"): Promise<v
   downloadBlob(new Blob([text], { type }), name);
 }
 
+/** Overview / Changes: the two pages of the whole comparison. */
+export function diffTabs(ctx: AppCtx, cmp: Compare, active: "overview" | "files", count?: HTMLElement): HTMLElement {
+  const tab = (key: "overview" | "files", label: string, extra?: Child) => {
+    const r = { view: key === "files" ? "difff" : "diff" };
+    return h("a", { class: "diff-tab", href: ctx.hrefRoute(r), "aria-current": key === active ? "page" : undefined, onClick: (ev: Event) => {
+      const me = ev as MouseEvent;
+      if (me.metaKey || me.ctrlKey || me.shiftKey) return;
+      ev.preventDefault();
+      if (key !== active) ctx.goRoute(r);
+    } }, label, extra);
+  };
+  return h("nav", { class: "diff-tabs", "aria-label": "Compare views" }, tab("overview", "Overview"), tab("files", "Changes", count ?? h("span", { class: "count" }, cmp.d.components.length.toLocaleString())));
+}
+
 /** The overview of all changes, with filters kept in the link. */
 export function diffOverviewPage(ctx: AppCtx, cmp: Compare): HTMLElement {
   const d = cmp.d;
@@ -78,6 +92,7 @@ export function diffOverviewPage(ctx: AppCtx, cmp: Compare): HTMLElement {
   const t = d.summary.total;
   const page = h("div", { class: "diff-page" });
   page.appendChild(h("header", { class: "page-head" }, h("h1", null, "Changes from ", h("span", { class: "d-removed-text" }, cmp.oldTitle), " to ", h("span", { class: "d-added-text" }, cmp.newTitle)), h("p", { class: "lead" }, `${plural(t.added + t.removed + t.changed, "global component")} differ: ${t.added.toLocaleString()} added, ${t.removed.toLocaleString()} removed, ${t.changed.toLocaleString()} changed. ${plural(d.summary.breakingChanges, "breaking change")} in ${plural(t.breaking, "component")}; ${plural(t.docsOnly, "component")} changed only in their documentation.`)));
+  page.appendChild(diffTabs(ctx, cmp, "overview"));
   const filter = { st: P.st ?? "", k: P.k ?? "", imp: P.imp ?? "", ns: P.ns ?? "", q: P.q ?? "" };
   const stat = (label: string, value: number, m: Mark | null, set: Partial<typeof filter>, cls = "") =>
     h("button", { type: "button", class: `stat ${cls}`, onClick: () => {

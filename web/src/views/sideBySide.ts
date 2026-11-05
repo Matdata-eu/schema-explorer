@@ -4,14 +4,12 @@
 import type { AppCtx, Route } from "../ctx";
 import { Diagram, layoutGraph, type View } from "../diagram";
 import { MARKER, type Compare, type ComponentDiff, type Mark } from "../diff";
-import { button, h, icon, plural, type Child } from "../dom";
+import { button, h, plural, type Child } from "../dom";
 import { buildNeighborhood, defaultNeighborhood, toMermaid, toPlantUml, type GraphSpec, type NeighborhoodOptions } from "../graph";
 import { KIND_SLUG, type Id, type Model } from "../model";
-import { highlight, snippet } from "../source";
-import { diffSeq, intraLine, pairRows, type Row } from "../textdiff";
 import { TreeView, pairTrees, rootNode, setTreeDiff, type TNode } from "../tree";
 import { boxActions, exportControls, fullscreenButton, refitOnResize, whenVisible } from "./diagramPanel";
-import { link } from "./common";
+import { diffTable, lineDiff, loadSource, type LineDiff, type SourceSide } from "./codeDiff";
 
 export type Which = "old" | "new";
 
@@ -434,85 +432,7 @@ export function sbsTreePanel(ctx: AppCtx, cmp: Compare, oldFocus: Id | undefined
 
 // ---- XSD source ----------------------------------------------------------------
 
-/** Cut the highlighted source into one fragment per line (spans broken at line ends are split). */
-function splitLines(pre: HTMLElement): HTMLElement[] {
-  const lines: HTMLElement[] = [];
-  let cur = h("span", { class: "cl" });
-  for (const node of [...pre.childNodes]) {
-    const text = node.textContent ?? "";
-    if (!text.includes("\n")) {
-      cur.appendChild(node);
-      continue;
-    }
-    text.split("\n").forEach((part, i) => {
-      if (i > 0) {
-        lines.push(cur);
-        cur = h("span", { class: "cl" });
-      }
-      if (!part) return;
-      if (node.nodeType === Node.TEXT_NODE) cur.append(part);
-      else {
-        const c = node.cloneNode(false) as HTMLElement;
-        c.textContent = part;
-        cur.appendChild(c);
-      }
-    });
-  }
-  lines.push(cur);
-  return lines;
-}
-
-/** Wrap the characters [from, to) of a line in a highlight. */
-function markRanges(el: HTMLElement, ranges: [number, number][]): void {
-  if (!ranges.length) return;
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  const texts: Text[] = [];
-  while (walker.nextNode()) texts.push(walker.currentNode as Text);
-  let at = 0;
-  for (const t of texts) {
-    const s = at;
-    const e = at + t.data.length;
-    at = e;
-    const cuts = ranges.filter(([a, b]) => a < e && b > s);
-    if (!cuts.length) continue;
-    const frag = document.createDocumentFragment();
-    let pos = s;
-    for (const [a, b] of cuts) {
-      const from = Math.max(a, s);
-      const to = Math.min(b, e);
-      if (from > pos) frag.append(t.data.slice(pos - s, from - s));
-      frag.append(h("span", { class: "ch" }, t.data.slice(from - s, to - s)));
-      pos = to;
-    }
-    if (pos < e) frag.append(t.data.slice(pos - s));
-    t.replaceWith(frag);
-  }
-}
-
-interface SourceSide {
-  text: string;
-  startLine: number;
-  lines: HTMLElement[];
-  where: string;
-}
-
-async function loadSide(ctx: AppCtx, cmp: Compare, which: Which, id: Id | undefined): Promise<SourceSide | string | null> {
-  if (id === undefined) return null;
-  const vctx = versionCtx(ctx, cmp, which);
-  const m = vctx.m;
-  const c = m.comp(id);
-  if (c.file === undefined || !c.line) return "No source location is known for it.";
-  const text = await vctx.sourceText(c.file);
-  if (text === null) return `The .xsd files of ${which === "old" ? cmp.oldTitle : cmp.newTitle} are not available here: the bundle was loaded without them.`;
-  const sn = snippet(text, c.line);
-  if (!sn) return "Could not find the declaration in the file.";
-  const pre = highlight(m, c.file, sn.text, (target, t) => link(vctx, target, t));
-  return { text: sn.text, startLine: sn.startLine, lines: splitLines(pre), where: `${m.b.files[c.file].name}:${c.line}` };
-}
-
-const MK: Record<string, string> = { del: "−", ins: "+", chg: "~", eq: "" };
-
-/** The XSD of both versions with a line diff: side by side (rows aligned, one scroll) or unified. */
+/** The source of both versions with a line diff: side by side (rows aligned, one scroll) or unified. */
 export function sbsSourcePanel(ctx: AppCtx, cmp: Compare, c: ComponentDiff): HTMLElement {
   const P = ctx.route.params;
   let unified = P.code === "unified" || (P.code === undefined && typeof window !== "undefined" && window.innerWidth < 700);
@@ -537,126 +457,33 @@ export function sbsSourcePanel(ctx: AppCtx, cmp: Compare, c: ComponentDiff): HTM
   const wrap = h("div", { class: "codediff" }, h("div", { class: "codediff-tools" }, h("div", { class: "btn-group" }, sbsBtn, uniBtn), ctxBtn, counts), body);
   let a: SourceSide | null = null;
   let b: SourceSide | null = null;
-  let rows: Row[] = [];
-  let ranges = new Map<number, { a: [number, number][]; b: [number, number][] }>();
-
-  const lineA = (i: number) => {
-    const el = a!.lines[i].cloneNode(true) as HTMLElement;
-    // Clones lose the listeners of the links: put them back by delegating to the original.
-    rewire(el, a!.lines[i]);
-    return el;
-  };
-  const lineB = (i: number) => {
-    const el = b!.lines[i].cloneNode(true) as HTMLElement;
-    rewire(el, b!.lines[i]);
-    return el;
-  };
-  const code = (side: "a" | "b", r: Row, idx: number | undefined): HTMLElement => {
-    if (idx === undefined) return h("td", { class: "code blank" });
-    const el = side === "a" ? lineA(idx) : lineB(idx);
-    const rg = ranges.get(rows.indexOf(r));
-    if (rg) markRanges(el, side === "a" ? rg.a : rg.b);
-    return h("td", { class: "code" }, el);
-  };
-  const num = (n: number | undefined, base: number | undefined) => h("td", { class: "ln" }, n === undefined || base === undefined ? "" : String(base + n));
-  const mk = (t: string) => h("td", { class: "mk", "aria-hidden": t ? undefined : "true" }, t ? h("span", { class: "dmark" }, t) : "");
+  let d: LineDiff | null = null;
 
   const draw = () => {
-    if (!a && !b) return;
-    const table = h("table", { class: `codediff-table ${unified ? "unified" : "split"}` });
-    if (!unified) table.appendChild(h("colgroup", null, h("col", { class: "c-ln" }), h("col", { class: "c-mk" }), h("col", { class: "c-code" }), h("col", { class: "c-ln" }), h("col", { class: "c-mk" }), h("col", { class: "c-code" })));
-    else table.appendChild(h("colgroup", null, h("col", { class: "c-ln" }), h("col", { class: "c-ln" }), h("col", { class: "c-mk" }), h("col", { class: "c-code" })));
-    const tbody = h("tbody");
-    const show = visibleRows(rows, changedOnly ? 3 : Infinity);
-    for (const item of show) {
-      if (typeof item === "object" && "fold" in item) {
-        const btn = h("button", { type: "button", class: "fold-btn", onClick: () => {
-          const extra = rows.slice(item.from, item.to);
-          const frag = document.createDocumentFragment();
-          for (const r of extra) frag.append(...rowEls(r));
-          tr.replaceWith(frag);
-        } }, icon("plus"), ` ${plural(item.to - item.from, "unchanged line")}`);
-        const tr = h("tr", { class: "fold" }, h("td", { colspan: unified ? 4 : 6 }, btn));
-        tbody.appendChild(tr);
-        continue;
-      }
-      tbody.append(...rowEls(item));
-    }
-    table.appendChild(tbody);
+    if (!d) return;
+    const table = diffTable(a, b, d, { unified, context: changedOnly ? 3 : Infinity });
     body.replaceChildren(h("div", { class: "codediff-heads" + (unified ? " unified" : "") }, sideHead("old", cmp.oldTitle, a), unified ? null : sideHead("new", cmp.newTitle, b)), h("div", { class: "codediff-scroll" }, table));
   };
   const sideHead = (which: Which, title: string, s: SourceSide | null) => h("div", { class: `side-head side-${which}` }, which === "old" ? "Old" : "New", h("span", { class: "faint" }, ` · ${title}`), s ? h("span", { class: "faint small mono" }, ` ${s.where}`) : h("span", { class: "faint small" }, " (none)"), unified && b ? [h("span", { class: "faint" }, " → "), "New", h("span", { class: "faint" }, ` · ${cmp.newTitle}`), h("span", { class: "faint small mono" }, ` ${b.where}`)] : null);
-  const rowEls = (r: Row): HTMLElement[] => {
-    const cls = `cd-${r.t}`;
-    if (!unified) return [h("tr", { class: cls }, num(r.a, a?.startLine), mk(r.t === "eq" || r.t === "ins" ? "" : MK[r.t]), code("a", r, r.a), num(r.b, b?.startLine), mk(r.t === "eq" || r.t === "del" ? "" : MK[r.t]), code("b", r, r.b))];
-    if (r.t === "eq") return [h("tr", { class: cls }, num(r.a, a?.startLine), num(r.b, b?.startLine), mk(""), code("b", r, r.b))];
-    const out: HTMLElement[] = [];
-    if (r.a !== undefined) out.push(h("tr", { class: "cd-del" + (r.t === "chg" ? " cd-pair" : "") }, num(r.a, a?.startLine), h("td", { class: "ln" }), mk("−"), code("a", r, r.a)));
-    if (r.b !== undefined) out.push(h("tr", { class: "cd-ins" + (r.t === "chg" ? " cd-pair" : "") }, h("td", { class: "ln" }), num(r.b, b?.startLine), mk("+"), code("b", r, r.b)));
-    return out;
-  };
 
+  const side = (which: Which, id: Id | undefined) => (id === undefined ? Promise.resolve(null) : loadSource(versionCtx(ctx, cmp, which), id, which === "old" ? cmp.oldTitle : cmp.newTitle));
   const load = async () => {
-    const [ra, rb] = await Promise.all([loadSide(ctx, cmp, "old", c.old?.id), loadSide(ctx, cmp, "new", c.new?.id)]);
+    const [ra, rb] = await Promise.all([side("old", c.old?.id), side("new", c.new?.id)]);
     const problems = [ra, rb].filter((x): x is string => typeof x === "string");
-    a = typeof ra === "object" ? ra : null;
-    b = typeof rb === "object" ? rb : null;
+    a = ra && typeof ra === "object" ? ra : null;
+    b = rb && typeof rb === "object" ? rb : null;
     if (!a && !b) {
       body.replaceChildren(...(problems.length ? problems : ["No source is known for it."]).map((p) => h("p", { class: "muted small" }, p)));
       return;
     }
-    const ta = a ? a.text.split("\n") : [];
-    const tb = b ? b.text.split("\n") : [];
-    // Lines differing only in indentation or spacing count as the same.
-    const norm = (l: string) => l.trim().replace(/\s+/g, " ");
-    rows = pairRows(diffSeq(ta.map(norm), tb.map(norm)));
-    ranges = new Map();
-    rows.forEach((r, i) => {
-      if (r.t === "chg") ranges.set(i, intraLine(ta[r.a!], tb[r.b!]));
-    });
-    const n = (t: string) => rows.filter((r) => r.t === t).length;
+    d = lineDiff(a, b);
+    const n = (t: string) => d!.rows.filter((r) => r.t === t).length;
     counts.replaceChildren(h("span", { class: "dmark d-added" }, "+"), ` ${n("ins")} added · `, h("span", { class: "dmark d-removed" }, "−"), ` ${n("del")} removed · `, h("span", { class: "dmark d-changed" }, "~"), ` ${plural(n("chg"), "changed line")}`);
     draw();
     for (const p of problems) body.prepend(h("p", { class: "muted small" }, p));
   };
   whenVisible(wrap, () => void load());
   return wrap;
-}
-
-/** Changed rows with `context` unchanged lines around them; longer unchanged stretches fold. */
-function visibleRows(rows: Row[], context: number): (Row | { fold: true; from: number; to: number })[] {
-  if (!Number.isFinite(context)) return rows;
-  const keep = new Uint8Array(rows.length);
-  rows.forEach((r, i) => {
-    if (r.t === "eq") return;
-    for (let j = Math.max(0, i - context); j <= Math.min(rows.length - 1, i + context); j++) keep[j] = 1;
-  });
-  if (!keep.some(Boolean)) return rows;
-  const out: (Row | { fold: true; from: number; to: number })[] = [];
-  for (let i = 0; i < rows.length; ) {
-    if (keep[i]) {
-      out.push(rows[i++]);
-      continue;
-    }
-    let j = i;
-    while (j < rows.length && !keep[j]) j++;
-    if (j - i <= 2) for (let k = i; k < j; k++) out.push(rows[k]);
-    else out.push({ fold: true, from: i, to: j });
-    i = j;
-  }
-  return out;
-}
-
-/** Give the links of a cloned line the behaviour of the original's. */
-function rewire(clone: HTMLElement, orig: HTMLElement): void {
-  const a = clone.querySelectorAll("a");
-  const b = orig.querySelectorAll("a");
-  a.forEach((el, i) => el.addEventListener("click", (ev) => {
-    const me = ev as MouseEvent;
-    if (me.metaKey || me.ctrlKey || me.shiftKey) return;
-    ev.preventDefault();
-    b[i]?.dispatchEvent(new MouseEvent("click", { bubbles: false, cancelable: true }));
-  }));
 }
 
 // ---- a page of the earlier version -------------------------------------------
