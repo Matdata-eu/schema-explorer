@@ -38,6 +38,7 @@ const DEFAULT_PREFS: Prefs = {
   direction: "DOWN",
   enums: true,
   incoming: true,
+  sidebar: true,
 };
 
 interface Example {
@@ -74,6 +75,21 @@ export class App implements AppCtx {
   private sourceCache = new Map<number, Promise<string | null>>();
   private _cmp: Compare | null = null;
   private onHash = () => this.readHash();
+  private onKey = (ev: KeyboardEvent) => {
+    const target = ev.composedPath()[0] as HTMLElement | undefined;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented) return;
+    if (target && (target.closest?.("input, select, textarea, [contenteditable]") || target.isContentEditable)) return;
+    // The Changes view has its own "/" (its filter box).
+    if (ev.key === "/" && this.side && this._route.view !== "diff" && this._route.view !== "difff") {
+      ev.preventDefault();
+      if (this.isNarrow()) this.side.el.classList.add("open");
+      else if (!this._prefs.sidebar) this.toggleSidebar();
+      this.side.focusSearch();
+    } else if (ev.key === "b" && this.side) {
+      ev.preventDefault();
+      this.toggleSidebar();
+    }
+  };
 
   constructor(root: HTMLElement, opts: AppOptions) {
     this.root = root;
@@ -87,17 +103,14 @@ export class App implements AppCtx {
     root.appendChild(this.shellEl);
     this.applyTheme();
     if (opts.routing) window.addEventListener("hashchange", this.onHash);
-    root.addEventListener("keydown", (ev) => {
-      if (ev.key === "/" && !(ev.target instanceof HTMLInputElement) && !(ev.target instanceof HTMLTextAreaElement)) {
-        ev.preventDefault();
-        this.side?.focusSearch();
-      }
-    });
+    // The standalone app owns the page, so its keys work wherever the focus is.
+    (opts.routing ? window : root).addEventListener("keydown", this.onKey as EventListener);
     this.wireDrop();
   }
 
   destroy(): void {
     window.removeEventListener("hashchange", this.onHash);
+    window.removeEventListener("keydown", this.onKey);
   }
 
   // ---- AppCtx -------------------------------------------------------------
@@ -540,6 +553,23 @@ export class App implements AppCtx {
     this.side = sidebar(this);
     this.bodyEl.insertBefore(this.side.el, this.mainEl);
     this.bodyEl.classList.remove("no-sidebar");
+    this.bodyEl.classList.toggle("sidebar-hidden", !this._prefs.sidebar);
+  }
+
+  private isNarrow(): boolean {
+    return !!window.matchMedia?.("(max-width: 860px)").matches;
+  }
+
+  /** Show or hide the sidebar: a drawer on a phone, a remembered choice on a wide screen. */
+  private toggleSidebar(): void {
+    if (!this.side) return;
+    if (this.isNarrow()) {
+      this.side.el.classList.toggle("open");
+      return;
+    }
+    this.setPrefs({ sidebar: !this._prefs.sidebar });
+    this.bodyEl.classList.toggle("sidebar-hidden", !this._prefs.sidebar);
+    this.renderTopbar();
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -604,7 +634,7 @@ export class App implements AppCtx {
     const t = this.topbar;
     t.replaceChildren();
     const m = this.model;
-    if (m) t.appendChild(button("", () => this.side?.el.classList.toggle("open"), { icon: "menu", cls: "ghost icon-only menu-btn", title: "Types, elements and search" }));
+    if (m && !this.opts.minimal) t.appendChild(button("", () => this.toggleSidebar(), { icon: "menu", cls: "ghost icon-only menu-btn", title: `${this._prefs.sidebar ? "Hide" : "Show"} the sidebar: types, elements and search (b)` }));
     t.appendChild(h("a", { class: "title", href: this.hrefRoute({ view: "home" }), onClick: (ev: Event) => {
       ev.preventDefault();
       if (this.model) this.goRoute({ view: "home" });
