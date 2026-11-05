@@ -3,7 +3,7 @@ import type { Compare } from "./diff";
 import type { Id, Model } from "./model";
 
 export interface Route {
-  /** "home" | "comp" | "file" | "overview" | "missing" | "diff" | "diffc" (query: `slug/qname`) */
+  /** "home" | "comp" | "file" | "overview" | "missing" | "diff" | "difff" (all changes with their source diff) | "diffc" (query: `slug/qname`) */
   view: string;
   id?: Id;
   /** Sub view of a page: "diagram" | "tree" */

@@ -9,6 +9,7 @@ import { openAbout, openHelp } from "./views/dialogs";
 import { homePage } from "./views/home";
 import { overviewPage } from "./views/overview";
 import { diffBanner, diffComponentPage, diffLink, diffOverviewPage } from "./views/compare";
+import { diffFilesPage } from "./views/changes";
 import { oldVersionBanner, versionCtx } from "./views/sideBySide";
 import { componentPage, filePage } from "./views/pages";
 import { sidebar, type Sidebar } from "./views/sidebar";
@@ -232,6 +233,7 @@ export class App implements AppCtx {
       const i = r.query.indexOf("/");
       path = `#/diff/${r.query.slice(0, i)}/${encodeURIComponent(r.query.slice(i + 1))}`;
     }
+    else if (r.view === "difff") path = "#/diff/files";
     else if (r.view !== "home") path = "#/" + r.view;
     return path + (qs ? "?" + qs : "");
   }
@@ -250,6 +252,7 @@ export class App implements AppCtx {
     if (parts[0] === "overview") return { view: "overview", params };
     if (parts[0] === "diff") {
       if (parts.length >= 3) return { view: "diffc", query: `${parts[1]}/${decodeURIComponent(parts.slice(2).join("/"))}`, tab, params };
+      if (parts[1] === "files") return { view: "difff", params };
       return { view: "diff", params };
     }
     if (parts[0] === "old" && this._cmp && parts.length >= 3) {
@@ -570,6 +573,9 @@ export class App implements AppCtx {
     } else if (r.view === "diff" && this._cmp) {
       page = diffOverviewPage(this, this._cmp);
       if (this.opts.routing) document.title = `Changes · ${title}`;
+    } else if (r.view === "difff" && this._cmp) {
+      page = diffFilesPage(this, this._cmp);
+      if (this.opts.routing) document.title = `Changes, file by file · ${title}`;
     } else if (r.view === "diffc" && this._cmp && r.query) {
       const i = r.query.indexOf("/");
       const cd = this._cmp.find(r.query.slice(0, i), r.query.slice(i + 1));
