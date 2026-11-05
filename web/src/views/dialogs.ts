@@ -71,7 +71,8 @@ export function openHelp(host: HTMLElement): void {
       "Finding things",
       false,
       ["Type in the ", b("search"), " box (", k("/"), " jumps to it) to match names of types, elements, attributes and groups, and words of their documentation and enumeration values. Use ", k("↑"), " ", k("↓"), " and ", k("Enter"), " to open a result."],
-      ["The tabs under the search box list ", b("Types"), " (complex types), ", b("Simple"), " types, global ", b("Elements"), ", ", b("Groups"), " (model groups, attribute groups, global attributes) and ", b("Files"), ". The namespace list narrows them to one namespace."]
+      ["The tabs under the search box list ", b("Types"), " (complex types), ", b("Simple"), " types, global ", b("Elements"), ", ", b("Groups"), " (model groups, attribute groups, global attributes) and ", b("Files"), ". The namespace list narrows them to one namespace."],
+      ["The menu button at the top left (or ", k("b"), ") hides the sidebar to give the page the full width, and shows it again. The choice is remembered."]
     ),
     section(
       "Type pages",

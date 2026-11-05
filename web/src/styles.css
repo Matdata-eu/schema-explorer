@@ -234,13 +234,15 @@ code,
 .topbar > select {
   flex-shrink: 0;
 }
-.btn.menu-btn {
-  display: none;
+@media (min-width: 861px) {
+  .body.sidebar-hidden {
+    grid-template-columns: 1fr;
+  }
+  .body.sidebar-hidden > .sidebar {
+    display: none;
+  }
 }
 @media (max-width: 860px) {
-  .btn.menu-btn {
-    display: inline-flex;
-  }
   /* Room for the title on a phone: the share button keeps its icon, About moves to the footer. */
   .topbar .share-btn span,
   .topbar .btn.about-btn {

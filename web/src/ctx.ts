@@ -20,6 +20,8 @@ export interface Prefs {
   direction: "DOWN" | "RIGHT";
   enums: boolean;
   incoming: boolean;
+  /** Show the sidebar (types, elements and search) on wide screens. */
+  sidebar: boolean;
 }
 
 export interface AppCtx {
