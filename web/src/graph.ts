@@ -176,7 +176,7 @@ export function buildNeighborhood(m: Model, o: NeighborhoodOptions): GraphSpec {
     return true;
   };
   const addType = (id: Id, focus = false) =>
-    take(`c${id}`, () => typeNode(m, id, { focus, attrs: focus || o.expanded.has(id), inherited: focus && o.inherited, open: o.openAttrs.has(id), cap: focus ? o.maxAttrs * 2 : o.maxAttrs }), focus);
+    take(`c${id}`, () => typeNode(m, id, { focus, attrs: focus || o.expanded.has(id), inherited: o.inherited && (focus || o.expanded.has(id)), open: o.openAttrs.has(id), cap: focus ? o.maxAttrs * 2 : o.maxAttrs }), focus);
   const edge = (e: EdgeSpec) => {
     if (!edges.has(e.key)) edges.set(e.key, e);
   };
@@ -185,7 +185,8 @@ export function buildNeighborhood(m: Model, o: NeighborhoodOptions): GraphSpec {
     const c = m.comp(tid);
     const ct = c.complexType;
     if (!ct) return;
-    const inh = isFocus && o.inherited;
+    // Inherited rows follow the toggle for every box that lists its rows: the focus and expanded boxes.
+    const inh = o.inherited && (isFocus || o.expanded.has(tid));
     // Base type.
     const base = ct.derivation?.base;
     if (m.isComplex(base) && addType(base)) edge({ key: `g${base}-${tid}`, from: `c${base}`, to: `c${tid}`, kind: ct.derivation!.method === "restriction" ? "restr" : "gen", label: ct.derivation!.method === "restriction" ? "«restriction»" : undefined });
