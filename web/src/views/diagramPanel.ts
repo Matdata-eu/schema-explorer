@@ -161,7 +161,7 @@ export function diagramPanel(ctx: AppCtx, focus: Id, opts: { tall?: boolean } = 
     depthBtn,
     toggle("Inherited", () => o.inherited, (v) => {
       o.inherited = v;
-    }, "List inherited attributes and child elements in this type's box"),
+    }, "List inherited attributes and child elements in the boxes of this type and of expanded types"),
     toggle("Used by", () => o.incoming, (v) => {
       o.incoming = v;
       ctx.setPrefs({ incoming: v });
